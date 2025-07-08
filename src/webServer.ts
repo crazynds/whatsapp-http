@@ -114,10 +114,18 @@ export async function createWebServer () {
 
         if(!client || !client.get('ready'))return res.status(404).send('Not found');
 
-        const chats = await getChats(client);
 
-        res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify(chats));
+        try {
+            const chats = await getChats(client);
+
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify(chats));
+        }
+        catch {
+            res.setHeader('Content-Type', 'application/json');
+            res.writeHead(500);
+            res.end(JSON.stringify({"error": "error geting chats"}));
+        }
     })
 
     // send messages to clients
@@ -129,10 +137,17 @@ export async function createWebServer () {
 
         const {chatId, message} = req.body;
 
-        const result = await sendMessage(client, chatId, message);
+        try {
+            const result = await sendMessage(client, chatId, message);
 
-        res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify(result));
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify(result));
+        }
+        catch {
+            res.setHeader('Content-Type', 'application/json');
+            res.writeHead(500);
+            res.end(JSON.stringify({"error": "error geting chats"}));
+        }
     })
 
     // get chat messages
@@ -144,10 +159,17 @@ export async function createWebServer () {
 
         const chatId = req.body.chatId;
 
-        const messages = await getChatMessages(client,chatId,200);
+        try {
+            const messages = await getChatMessages(client,chatId,200);
 
-        res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify(messages));
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify(messages));
+        }
+        catch {
+            res.setHeader('Content-Type', 'application/json');
+            res.writeHead(500);
+            res.end(JSON.stringify({"error": "error geting chats"}));
+        }
     })
 
 

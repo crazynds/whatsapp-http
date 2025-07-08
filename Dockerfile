@@ -1,16 +1,28 @@
 FROM node:22-alpine
 
-ARG PORT=3000
-VOLUME [ "/app/data" ]
+RUN apk add --no-cache \
+    chromium \
+    nss \
+    freetype \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont \
+    dumb-init
 
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser \
+    PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+    NODE_ENV=production
+
+RUN npm install -g typescript
 WORKDIR /app
+COPY . .
 
-COPY . /app
-
-RUN npm install
-RUN npm run build
-RUN npm prune --production
+RUN npm install --include=dev
+RUN tsc
+RUN npm uninstall -g typescript
 
 EXPOSE 8000
 
-CMD ["npm","run", "start"]
+ENTRYPOINT ["dumb-init", "--"]
+CMD ["npm", "run", "start"]
+

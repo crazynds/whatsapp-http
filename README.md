@@ -1,6 +1,6 @@
 # WhatsApp API Docker Container
 
-This Docker container runs an API for WhatsApp, allowing for easy and secure integration with WhatsApp for message automation and other services.
+Docker container for whatsapp interaction over http
 
 ## Getting Started
 
@@ -45,18 +45,13 @@ docker run -it --rm arturcsegat/whatshttp:latest bash
 * /app - The aplication folder.
 
 ### Routes
-* [GET]```/client/:clientId/create?webHook={url}```: Create a client and saves the webHook url. You can recall this route to update the webHook without recreating the client. And if you use the same `clientId` you can recover old sessions.
+* [GET]```/client/create?clientId={id}&webHook={url}```: Create a client and saves the webHook url. You can recall this route to update the webHook without recreating the client. And if you use the same `clientId` you can recover old sessions.
 * [GET]```/client/:clientId```: Show the current status of this client. This route return a json like: `{clientId:{string}, ready:{bool}, qrCode:{string|null}, webHook: {string|null}}`. The meaning of the ready variable is if the client is connected and able to send or recive any messages.
 * [GET]```/client/:clientId/qrCode```: Route to render the qr code if it exists, or return 404.
-* [POST]```/client/:clientId/send```: Send messages to chats, should receive `chatId` and `message` in body.
 * [GET]```/client/:clientId/chat```: return list of chats of this client
-* [POST]```/client/:clientID/chat/messages```: return list of messages of chat, should receive `chatId` in body
-
-## Built With
-
-* Node.js v22.4.0
-* Express v4.17.0
-* whatsapp-web.js v1.25.0
+* [GET]```/client/:clientId/chat/:phoneNumber```: return information about the chat 
+* [GET]```/client/:clientID/chat/:phoneNumber/messages```: return list of messages of chat
+* [POST]```/client/:clientId/chat/:phoneNumber/send```: Send messages to chats, should `message` in body.
 
 ## Find Us
 

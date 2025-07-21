@@ -152,27 +152,28 @@ export async function createWebServer() {
 
         const messageId = req.params.messageId;
 
-        const filename = await getMessageMedia(client, messageId);
-        if (!filename) {
-            return res.status(404).json({ error: 'Media not found or download failed' });
-        }
-
-        const filepath = path.resolve('./media', filename);
-        res.sendFile(filepath, async (err) => {
-            try {
-                await fs.unlink(filepath);
-                if (err) {
-                    console.error("Error sending file:", err);
-                }
-            } catch (unlinkErr) {
-                console.error("Error deleting file:", unlinkErr);
+        try {
+            const filename = await getMessageMedia(client, messageId);
+            if (!filename) {
+                return res.status(404).json({ error: 'Media not found or download failed' });
             }
-        });
+
+            const filepath = path.resolve('./media', filename);
+            res.sendFile(filepath, async (err) => {
+                try {
+                    await fs.unlink(filepath);
+                    if (err) {
+                        console.error("Error sending file:", err);
+                    }
+                } catch (unlinkErr) {
+                    console.error("Error deleting file:", unlinkErr);
+                }
+            });
+        } catch (err) {
+            res.status(500).json({ error: `error fetching media ${err}` });
+        }
     });
 
-    // ==== NEW ROUTES FOR CONTACTS ====
-
-    // Get all contacts for a client
     server.get('/client/:clientId/contacts', async (req: Request, res: Response) => {
         const client = await Client.findByPk(req.params.clientId);
         if (!client) return res.status(404).send('Client not found');
@@ -186,7 +187,6 @@ export async function createWebServer() {
         }
     });
 
-    // Get contact info by chat ID
     server.get('/client/:clientId/contacts/:chatId', async (req: Request, res: Response) => {
         const client = await Client.findByPk(req.params.clientId);
         if (!client) return res.status(404).send('Client not found');

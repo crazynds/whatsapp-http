@@ -43,26 +43,16 @@ export async function getChats(model: Model<any, any>) {
     const results = [];
 
     for (const chat of chats) {
-        const contact = await chat.getContact();
-        const profilePicUrl = await contact.getProfilePicUrl();
-
         results.push({
             id: chat.id._serialized,
             name: chat.name,
             unreadCount: chat.unreadCount,
-            lastMessageBody: chat.lastMessage.body,
+            lastMessageBody: chat.lastMessage?.body ?? null,
             isArchived: chat.archived,
             isGroup: chat.isGroup,
             isMuted: chat.isMuted,
             isReadOnly: chat.isReadOnly,
             isPinned: chat.pinned,
-            contactInfo: {
-                id: contact.id._serialized,
-                name: contact.name,
-                number: contact.number,
-                pushname: contact.pushname,
-                profilePicUrl,
-            },
         });
     }
 
@@ -75,8 +65,6 @@ export async function getChat(model: Model<any, any>, chatId: string) {
     if (!client) return false;
 
     const chat = await client.getChatById(chatId);
-    const contact = await chat.getContact();
-    const profilePicUrl = await contact.getProfilePicUrl();
 
     return {
         id: chat.id._serialized,
@@ -88,13 +76,6 @@ export async function getChat(model: Model<any, any>, chatId: string) {
         isMuted: chat.isMuted,
         isReadOnly: chat.isReadOnly,
         isPinned: chat.pinned,
-        contactInfo: {
-            id: contact.id._serialized,
-            name: contact.name,
-            number: contact.number,
-            pushname: contact.pushname,
-            profilePicUrl,
-        },
     };
 }
 export async function getChatMessages(model: Model<any,any>, chatId: string, count: number){
@@ -105,7 +86,6 @@ export async function getChatMessages(model: Model<any,any>, chatId: string, cou
 
     if(!chat) return false;
     const msgs = await chat.fetchMessages({limit: count})
-    console.log(msgs);
 
     const m = [];
     for (const msg of msgs) {
@@ -128,6 +108,55 @@ export async function getChatMessages(model: Model<any,any>, chatId: string, cou
     return m;
 }
 
+export async function getContacts(model: Model<any, any>) {
+    const clientId = model.get('clientId') as string | null;
+    const client = clients[clientId ?? ''];
+    if (!client) return false;
+
+    const contacts = await client.getContacts();
+
+    const results = await Promise.all(
+        contacts.map(async (contact) => {
+            const profilePicUrl = await contact.getProfilePicUrl();
+
+            return {
+                id: contact.id._serialized,
+                name: contact.name,
+                number: contact.number,
+                pushname: contact.pushname,
+                profilePicUrl,
+            };
+        })
+    );
+
+    return results;
+}
+
+export async function getContact(model: Model<any, any>, chatId: string) {
+    const clientId = model.get('clientId') as string | null;
+    const client = clients[clientId ?? ''];
+    if (!client) return false;
+
+    const chat = await client.getChatById(chatId);
+    const contact = await chat.getContact();
+
+    let profilePicUrl: string | null = null;
+    try {
+        profilePicUrl = await contact.getProfilePicUrl();
+    } catch {
+        profilePicUrl = null;
+    }
+
+    return {
+        id: contact.id._serialized,
+        name: contact.name,
+        number: contact.number,
+        pushname: contact.pushname,
+        profilePicUrl,
+    };
+}
+
+
 export async function createClient(message_handler: ((msg: WAWebJS.Message) => Promise<boolean>) | null = null, clientId: string | null = null) {
     if (!clientId) {
         clientId = (await ClientModel.count() + 1).toString()
@@ -138,8 +167,12 @@ export async function createClient(message_handler: ((msg: WAWebJS.Message) => P
         defaults: { ready: false }
     };
 
-    const r = await ClientModel.findOrCreate(opts);
-    const clientModel = r[0];
+    const [clientModel, created] = await ClientModel.findOrCreate(opts);
+    if (!created) {
+        return clientModel;
+    }
+
+
     const client = new Client({
         authStrategy: new LocalAuth({
             dataPath: './data/',
@@ -156,21 +189,21 @@ export async function createClient(message_handler: ((msg: WAWebJS.Message) => P
         })
         clientModel.save();
     });
-    
+
     client.on('qr', (qr) => {
         clientModel.set({
             qrCode: qr
         })
         clientModel.save();
     });
-    
-    client.on('ready', () => {
+
+    client.on('ready', async () => {
         clientModel.set({
             ready: true
         })
         clientModel.save();
     });
-    
+
     if (message_handler) {
         client.on('message', async (msg) => {
             const a = await message_handler(msg);
@@ -179,7 +212,7 @@ export async function createClient(message_handler: ((msg: WAWebJS.Message) => P
             }
         });
     }
-    
+
     client.initialize();
     clients[clientId] = client
     return clientModel;

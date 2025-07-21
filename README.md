@@ -44,14 +44,105 @@ docker run -it --rm arturcsegat/whatshttp:latest bash
 #### Useful File Locations
 * /app - The aplication folder.
 
-### Routes
-* [GET]```/client/create?clientId={id}&webHook={url}```: Create a client and saves the webHook url. You can recall this route to update the webHook without recreating the client. And if you use the same `clientId` you can recover old sessions.
-* [GET]```/client/:clientId```: Show the current status of this client. This route return a json like: `{clientId:{string}, ready:{bool}, qrCode:{string|null}, webHook: {string|null}}`. The meaning of the ready variable is if the client is connected and able to send or recive any messages.
-* [GET]```/client/:clientId/qrCode```: Route to render the qr code if it exists, or return 404.
-* [GET]```/client/:clientId/chat```: return list of chats of this client
-* [GET]```/client/:clientId/chat/:phoneNumber```: return information about the chat 
-* [GET]```/client/:clientID/chat/:phoneNumber/messages```: return list of messages of chat
-* [POST]```/client/:clientId/chat/:phoneNumber/send```: Send messages to chats, should `message` in body.
+## API Routes
+
+### 1. Get QR Code for Client  
+`GET /client/qrCode?clientId=&webHook=`  
+Returns a QR code image to scan for WhatsApp login.  
+- `clientId` (optional): reuse existing client or create new.  
+- `webHook` (optional): URL to receive message webhook POSTs.
+
+### 2. Get Client Info  
+`GET /client/:clientId`  
+Returns client status including readiness, QR code data, and webhook URL.
+
+### 3. Get All Chats  
+`GET /client/:clientId/chat`  
+Lists all chats for the client. Client must be ready.
+
+### 4. Get Single Chat  
+`GET /client/:clientId/chat/:chatId[?group=true]`  
+Returns chat info and associated contact details.  
+- If `chatId` lacks suffix, adds `@g.us` if `group=true`, otherwise `@c.us`.
+
+### 5. Send Message  
+`POST /client/:clientId/chat/:chatId/send`  
+Send a text message to the chat.  
+- JSON body: `{ "message": "text" }`  
+- `chatId` suffix logic applies as above.
+
+### 6. Get Chat Messages  
+`GET /client/:clientId/chat/:chatId/messages[?group=true]`  
+Returns last 200 messages from the chat.
+
+### 7. Get All Contacts  
+`GET /client/:clientId/contact`  
+Returns all contacts for the client. Client must be ready.
+
+### 8. Get Contact by Chat ID  
+`GET /client/:clientId/contact/:chatId[?group=true]`  
+Returns contact info for given chat ID, with suffix logic applied.
+
+## Examples
+
+Remember the id of a private chat is the phone number plus @c.us, the id of a group is different (see all chats to find your group id);
+
+Ex: 
+```json
+phone +55 11 91234-5678
+id: 5511912345678@c.us
+```
+
+
+
+### Get QR Code for new client
+```bash
+curl "http://localhost:3000/client/qrCode"
+```
+
+### Get all chats for a client
+```bash
+curl "http://localhost:3000/client/123/chat"
+```
+
+### Get single chat (individual)
+```bash
+curl "http://localhost:3000/client/123/chat/456"
+```
+
+### Get single chat (group)
+```bash
+curl "http://localhost:3000/client/123/chat/456?group=true"
+```
+
+### Send message to chat
+```bash
+curl -X POST "http://localhost:3000/client/123/chat/456/send" \
+    -H "Content-Type: application/json" \
+    -d '{"message":"Hello from API!"}'
+```
+
+### Send message to chat (group)
+```bash
+curl -X POST "http://localhost:3000/client/123/chat/456/send?group=true" \
+    -H "Content-Type: application/json" \
+    -d '{"message":"Hello from API!"}'
+```
+
+### Get last messages from chat
+```bash
+curl "http://localhost:3000/client/123/chat/456/messages"
+```
+
+### Get all contacts
+```bash
+curl "http://localhost:3000/client/123/contact"
+```
+
+### Get contact info by chat ID (group)
+```bash
+curl "http://localhost:3000/client/123/contact/456?group=true"
+```
 
 ## Find Us
 

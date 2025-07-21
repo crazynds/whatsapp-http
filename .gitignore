@@ -1,5 +1,6 @@
 dist/
 data/
+media/
 node_modules/
 .wwebjs_cache/
 .env

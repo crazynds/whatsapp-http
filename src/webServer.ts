@@ -1,7 +1,9 @@
 import express, { Request, Response } from 'express';
-import { createClient, getChatMessages, getChats, getChat, sendMessage, getContact, getContacts, Message } from './whatsapp_api';
+import { createClient, getChatMessages, getChats, getChat, sendMessage, getContact, getContacts, Message, JsonMsg, JsonClient, getMessageMedia } from './whatsapp_api';
 import Client from './models/client';
 import QRCode from 'qrcode';
+import path from 'path';
+import fs from 'fs/promises';
 
 export const port: number = parseInt(process.env.PORT ?? '3000');
 const server = express();
@@ -13,24 +15,11 @@ function on_message(webHook: string | null) {
     return async function (msg: Message) {
         if (webHook === null) {
             console.log(`${msg.from}: ${msg.body}`);
+            console.log(msg)
             return false;
         }
-        const infos = await msg.getInfo();
-        const m = {
-            id: msg.id._serialized,
-            author: msg.from,
-            body: msg.body,
-            type: msg.type,
-            info: infos
-                ? {
-                      deliverd: infos.delivery.length > 0,
-                      read: infos.read.length > 0,
-                      played: infos.played.length > 0,
-                  }
-                : {},
-            isForwarded: msg.isForwarded,
-            timestamp: new Date(msg.timestamp * 1000),
-        };
+
+        const m = JsonMsg(msg);
         try {
             await fetch(webHook, {
                 method: 'POST',
@@ -93,12 +82,7 @@ export async function createWebServer() {
 
         if (!client) return res.status(404).send('Not found');
 
-        res.json({
-            clientId: client.get('clientId'),
-            ready: client.get('ready'),
-            qr: client.get('qrCode') ?? null,
-            webHook: client.get('webHook') ?? null,
-        });
+        res.json(JsonClient(client));
     });
 
     server.get('/client/:clientId/chat', async (req: Request, res: Response) => {
@@ -157,6 +141,33 @@ export async function createWebServer() {
         } catch (err) {
             res.status(500).json({ error: `error getting messages ${err}` });
         }
+    });
+    server.get('/client/:clientId/message/:messageId/media', async (req: Request, res: Response) => {
+        const client = await Client.findByPk(req.params.clientId);
+        if (!client || !client.get('ready')) return res.status(404).send('Not found');
+
+        if (!client) {
+            return res.status(404).json({ error: 'Client not found' });
+        }
+
+        const messageId = req.params.messageId;
+
+        const filename = await getMessageMedia(client, messageId);
+        if (!filename) {
+            return res.status(404).json({ error: 'Media not found or download failed' });
+        }
+
+        const filepath = path.resolve('./media', filename);
+        res.sendFile(filepath, async (err) => {
+            try {
+                await fs.unlink(filepath);
+                if (err) {
+                    console.error("Error sending file:", err);
+                }
+            } catch (unlinkErr) {
+                console.error("Error deleting file:", unlinkErr);
+            }
+        });
     });
 
     // ==== NEW ROUTES FOR CONTACTS ====

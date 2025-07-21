@@ -75,11 +75,16 @@ Send a text message to the chat.
 `GET /client/:clientId/chat/:chatId/messages[?group=true]`  
 Returns last 200 messages from the chat.
 
-### 7. Get All Contacts  
+### 7. Donwload Media from Message
+`GET /client/:clientId/message/:messageId`  
+Returns file containing media for the message
+- The `messageId` should be retrieved from the previous route.
+
+### 8. Get All Contacts  
 `GET /client/:clientId/contact`  
 Returns all contacts for the client. Client must be ready.
 
-### 8. Get Contact by Chat ID  
+### 9. Get Contact by Chat ID  
 `GET /client/:clientId/contact/:chatId[?group=true]`  
 Returns contact info for given chat ID, with suffix logic applied.
 
@@ -122,6 +127,11 @@ curl -X POST "http://localhost:3000/client/123/chat/456/send" \
     -d '{"message":"Hello from API!"}'
 ```
 
+### Get all messages from chat
+```bash
+curl "http://localhost:3000/client/123/chat/456/messages"
+```
+
 ### Send message to chat (group)
 ```bash
 curl -X POST "http://localhost:3000/client/123/chat/456/send?group=true" \
@@ -129,14 +139,19 @@ curl -X POST "http://localhost:3000/client/123/chat/456/send?group=true" \
     -d '{"message":"Hello from API!"}'
 ```
 
-### Get last messages from chat
+### Donwload media from message
 ```bash
-curl "http://localhost:3000/client/123/chat/456/messages"
+curl -X GET "http://localhost:3000/client/123/message/456/media" \
 ```
 
 ### Get all contacts
 ```bash
 curl "http://localhost:3000/client/123/contact"
+```
+
+### Get contact info by chat ID (individual)
+```bash
+curl "http://localhost:3000/client/123/contact/456"
 ```
 
 ### Get contact info by chat ID (group)

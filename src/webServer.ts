@@ -80,7 +80,7 @@ export async function createWebServer() {
         const id = req.params.clientId;
         const client = await Client.findByPk(id);
 
-        if (!client) return res.status(404).send('Not found');
+        if (!client) return res.status(404).send('Client not found');
 
         res.json(JsonClient(client));
     });
@@ -89,7 +89,8 @@ export async function createWebServer() {
         const id = req.params.clientId;
         const client = await Client.findByPk(id);
 
-        if (!client || !client.get('ready')) return res.status(404).send('Not found');
+        if (!client) return res.status(404).send('Client not found');
+        if (!client.get('ready')) return res.status(40).send('Client not ready');
 
         try {
             const chats = await getChats(client);
@@ -116,7 +117,8 @@ export async function createWebServer() {
 
     server.post('/client/:clientId/chat/:chatId/send', async (req: Request, res: Response) => {
         const client = await Client.findByPk(req.params.clientId);
-        if (!client) return res.status(404).send('Not found');
+        if (!client) return res.status(404).send('Client not found');
+        if (!client.get('ready')) return res.status(400).send('Client not ready');
 
         const chatId = normalizeChatId(req.params.chatId, req.query.group as string | undefined);
         const { message } = req.body;
@@ -131,7 +133,8 @@ export async function createWebServer() {
 
     server.get('/client/:clientId/chat/:chatId/messages', async (req: Request, res: Response) => {
         const client = await Client.findByPk(req.params.clientId);
-        if (!client || !client.get('ready')) return res.status(404).send('Not found');
+        if (!client) return res.status(404).send('Client not found');
+        if (!client.get('ready')) return res.status(400).send('Client not ready');
 
         const chatId = normalizeChatId(req.params.chatId, req.query.group as string | undefined);
 

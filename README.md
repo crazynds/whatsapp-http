@@ -18,31 +18,47 @@ To run this container, you will need to have Docker installed.
 
 #### Container Parameters
 
+#### Container Parameters
+
 You can run the container with the following parameters:
 
-```shell
-docker run arturcsegat/whatshttp:latest [parameters]
+```
+shell
+docker run -v /your/path/data:/app/data arturcsegat/whatshttp:latest [parameters]
 ```
 
 Basic usage example:
-```shell
-docker run -d --name whatshttp -p 3000:3000 arturcsegat/whatshttp:latest
 ```
-
-To start a shell inside the container:
-```shell
-docker run -it --rm arturcsegat/whatshttp:latest bash
+shell
+docker run -d --name whatshttp -p 3000:3000 -v /home/artur/data:/app/data arturcsegat/whatshttp:latest
 ```
 
 #### Environment Variables
-* PORT - Port the server will run inside the docker. Default: 3000  
-* DB_PATH - Path to sqlite database, if not defined will store clients in memory
+
+- `PORT` – Port the server will run inside the container. Default: `3000`  
+- `DB_PATH` – Path to SQLite database. If not defined, clients will be stored in memory.
+
+You can pass them with `-e`, Example:
+
+```
+shell
+docker run -d \
+  -p 3000:3000 \
+  -v $(pwd)/data:/app/data \
+  -e PORT=3000 \
+  -e DB_PATH=/app/data/database.sqlite \
+  arturcsegat/whatshttp:latest
+```
+
+---
 
 #### Volumes
-* /app/data - Directory where session are stored.
 
-#### Useful File Locations
-* /app - The aplication folder.
+- `/app/data` – Directory where sessions are stored.
+
+To persist session data across restarts and container deletions, **bind this path to a local directory** (as shown above).
+
+---
 
 ## API Routes
 

@@ -19,6 +19,7 @@ export async function JsonMsg(msg: Message): Promise<object> {
     return {
         id: msg.id._serialized,
         from: msg.from,
+        group_member_from: msg.author,
         fromMe: msg.fromMe,
         body: msg.body || '',
         timestamp: new Date(msg.timestamp * 1000),

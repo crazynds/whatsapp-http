@@ -35,7 +35,7 @@ docker run -it --rm arturcsegat/whatshttp:latest bash
 ```
 
 #### Environment Variables
-* PORT - Port the server will run inside the docker. Default: 3000
+* PORT - Port the server will run inside the docker. Default: 3000  
 * DB_PATH - Path to sqlite database, if not defined will store clients in memory
 
 #### Volumes
@@ -69,22 +69,29 @@ Returns chat info and associated contact details.
 `POST /client/:clientId/chat/:chatId/send`  
 Send a text message to the chat.  
 - JSON body: `{ "message": "text" }`  
-- `chatId` suffix logic applies as above.
+- `chatId` suffix logic applies as above.  
+- You may add `response_to_id` to send a response to a message by its serialized id  
+- You may add media to the message via mimetype (see example as the body is no longer JSON)
 
 ### 6. Get Chat Messages  
 `GET /client/:clientId/chat/:chatId/messages[?group=true]`  
 Returns last 200 messages from the chat.
 
-### 7. Donwload Media from Message
+### 7. Get Message  
 `GET /client/:clientId/message/:messageId`  
-Returns file containing media for the message
+Get a message by its id  
 - The `messageId` should be retrieved from the previous route.
 
-### 8. Get All Contacts  
+### 8. Donwload Media from Message  
+`GET /client/:clientId/message/:messageId/media`  
+Returns file containing media for the message  
+- The `messageId` should be retrieved from the previous route.
+
+### 9. Get All Contacts  
 `GET /client/:clientId/contact`  
 Returns all contacts for the client. Client must be ready.
 
-### 9. Get Contact by Chat ID  
+### 10. Get Contact by Chat ID  
 `GET /client/:clientId/contact/:chatId[?group=true]`  
 Returns contact info for given chat ID, with suffix logic applied.
 
@@ -97,8 +104,6 @@ Ex:
 phone +55 11 91234-5678
 id: 5511912345678@c.us
 ```
-
-
 
 ### Get QR Code for new client
 ```bash
@@ -127,6 +132,28 @@ curl -X POST "http://localhost:3000/client/123/chat/456/send" \
     -d '{"message":"Hello from API!"}'
 ```
 
+### Send message in reply to another
+```bash
+curl -X POST "http://localhost:3000/client/123/chat/456/send" \
+    -H "Content-Type: application/json" \
+    -d '{"message":"This is a reply", "response_to_id": "1234567890@c.us_ABCDEFG1234567"}'
+```
+
+### Send media with caption
+```bash
+curl -X POST "http://localhost:3000/client/123/chat/456/send" \
+  -F "message=Here is the image" \
+  -F "media=@/home/user/image.jpg"
+```
+
+### Send media in reply to message
+```bash
+curl -X POST "http://localhost:3000/client/123/chat/456/send" \
+  -F "message=Responding with an image" \
+  -F "media=@/home/user/image.jpg" \
+  -F "response_to_id=1234567890@c.us_ABCDEFG1234567"
+```
+
 ### Get all messages from chat
 ```bash
 curl "http://localhost:3000/client/123/chat/456/messages"
@@ -139,9 +166,14 @@ curl -X POST "http://localhost:3000/client/123/chat/456/send?group=true" \
     -d '{"message":"Hello from API!"}'
 ```
 
+### Get message
+```bash
+curl -X GET "http://localhost:3000/client/123/message/456"
+```
+
 ### Donwload media from message
 ```bash
-curl -X GET "http://localhost:3000/client/123/message/456/media" \
+curl -X GET "http://localhost:3000/client/123/message/456/media"
 ```
 
 ### Get all contacts
@@ -164,11 +196,10 @@ curl "http://localhost:3000/client/123/contact/456?group=true"
 * [GitHub](https://github.com/ArturCSegat/whatshttp)
 * [Docker Hub](https://hub.docker.com/r/arturcsegat/whatshttp)
 
-
 ## Authors
+
 * [ArturCSegat](https://github.com/ArturCSegat)
 * [Crazynds](https://github.com/crazynds)
-
 
 ## License
 

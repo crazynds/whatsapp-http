@@ -1,5 +1,5 @@
 import express, { Request, Response } from 'express';
-import { createClient, getChatMessages, getChats, getChat, sendMessage, getContact, getContacts, Message, JsonMsg, JsonClient, getMessageMedia } from './whatsapp_api';
+import { createClient, getChatMessages, getChats, getChat, sendMessage, getContact, getContacts, Message, JsonMsg, JsonClient, getMessageMedia, JsonChat, getMessage } from './whatsapp_api';
 import Client from './models/client';
 import QRCode from 'qrcode';
 import path from 'path';
@@ -8,6 +8,10 @@ import fs from 'fs/promises';
 export const port: number = parseInt(process.env.PORT ?? '3000');
 const server = express();
 server.use(express.json());
+
+import multer from 'multer';
+const upload = multer();
+
 
 export default server;
 
@@ -19,7 +23,8 @@ function on_message(webHook: string | null) {
             return false;
         }
 
-        const m = JsonMsg(msg);
+        const chat = await msg.getChat();
+        const m = {chat: await JsonChat(chat), message: await JsonMsg(msg)};
         try {
             await fetch(webHook, {
                 method: 'POST',
@@ -115,16 +120,24 @@ export async function createWebServer() {
         }
     });
 
-    server.post('/client/:clientId/chat/:chatId/send', async (req: Request, res: Response) => {
+    server.post('/client/:clientId/chat/:chatId/send', upload.single('media'), async (req: Request, res: Response) => {
         const client = await Client.findByPk(req.params.clientId);
         if (!client) return res.status(404).send('Client not found');
         if (!client.get('ready')) return res.status(400).send('Client not ready');
 
         const chatId = normalizeChatId(req.params.chatId, req.query.group as string | undefined);
-        const { message } = req.body;
+        const { message, response_to_id } = req.body;
+
+        const mediaFile = req.file;
 
         try {
-            const result = await sendMessage(client, chatId, message);
+            const result = await sendMessage(
+                client,
+                chatId,
+                message ?? null,
+                mediaFile ?? null,
+                response_to_id ?? null
+            );
             res.json(result);
         } catch (err) {
             res.status(500).json({ error: `error sending message: ${err}` });
@@ -145,6 +158,29 @@ export async function createWebServer() {
             res.status(500).json({ error: `error getting messages ${err}` });
         }
     });
+
+    server.get('/client/:clientId/message/:messageId', async (req: Request, res: Response) => {
+        const client = await Client.findByPk(req.params.clientId);
+        if (!client || !client.get('ready')) return res.status(404).send('Not found');
+
+        if (!client) {
+            return res.status(404).json({ error: 'Client not found' });
+        }
+
+        const messageId = req.params.messageId;
+
+        try {
+            const msg = await getMessage(client, messageId);
+            if (!msg) {
+                return res.status(404).json({ error: 'Message not found' });
+            }
+
+            res.json(msg);
+        } catch (err) {
+            res.status(500).json({ error: `error fetching media ${err}` });
+        }
+    });
+
     server.get('/client/:clientId/message/:messageId/media', async (req: Request, res: Response) => {
         const client = await Client.findByPk(req.params.clientId);
         if (!client || !client.get('ready')) return res.status(404).send('Not found');

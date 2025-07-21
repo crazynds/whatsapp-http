@@ -1,4 +1,4 @@
-import WAWebJS, { Client, LocalAuth } from 'whatsapp-web.js';
+import WAWebJS, { Client, LocalAuth, MessageMedia} from 'whatsapp-web.js';
 
 import ClientModel from '../models/client'
 import { FindOrCreateOptions, Model } from '@sequelize/core';
@@ -24,6 +24,8 @@ export async function JsonMsg(msg: Message): Promise<object> {
         body: msg.body || '',
         timestamp: new Date(msg.timestamp * 1000),
         hasMedia: msg.hasMedia === true,
+        isQuote:msg.hasQuotedMsg,
+        quoteId: msg.hasQuotedMsg ? (await msg.getQuotedMessage()).id._serialized : null,
         isForwarded: msg.isForwarded || false,
         mentionedIds: msg.mentionedIds ?? [],
         info: infos ? {
@@ -70,13 +72,55 @@ export function JsonClient(client: Model<any, any>): object {
 }
 
 
-export async function sendMessage(model: Model<any,any>, chatId: string, message: string){
+export async function sendMessage(
+    model: Model<any, any>,
+    chatId: string,
+    message: string | null,
+    mediaFile: Express.Multer.File | null = null,
+    responseToId: string | null = null
+) {
+    const clientId = model.get('clientId') as string | null;
+    const client = clients[clientId ?? ''];
+    if (!client) return false;
+
+    let quotedMessage: Message | undefined;
+
+    if (responseToId) {
+        quotedMessage = await client.getMessageById(responseToId);
+    }
+
+    let msg;
+
+    if (mediaFile) {
+        const mimetype = mediaFile.mimetype;
+        const base64 = mediaFile.buffer.toString('base64');
+        const filename = mediaFile.originalname;
+
+        const media = new MessageMedia(mimetype, base64, filename);
+        msg = await client.sendMessage(chatId, media, {
+            caption: message ?? undefined,
+            quotedMessageId: quotedMessage?.id._serialized,
+        });
+    } else if (message) {
+        msg = await client.sendMessage(chatId, message, {
+            quotedMessageId: quotedMessage?.id._serialized,
+        });
+    } else {
+        throw new Error('You must provide either message or media');
+    }
+
+    return await JsonMsg(msg);
+}
+
+export async function getMessage(model: Model<any, any>, messageId: string): Promise<object | false> {
+    const MEDIA_DIR = path.resolve('./media');
+    await fs.mkdir(MEDIA_DIR, { recursive: true });
+
     const clientId = model.get('clientId') as string | null;
     const client = clients[ clientId ?? ''];
     if(!client) return false;
 
-    const msg = await client.sendMessage(chatId, message);
-
+    const msg = await client.getMessageById(messageId);
     return await JsonMsg(msg);
 }
 

@@ -23,13 +23,11 @@ To run this container, you will need to have Docker installed.
 You can run the container with the following parameters:
 
 ```
-shell
 docker run -v /your/path/data:/app/data arturcsegat/whatshttp:latest [parameters]
 ```
 
 Basic usage example:
 ```
-shell
 docker run -d --name whatshttp -p 3000:3000 -v /home/artur/data:/app/data arturcsegat/whatshttp:latest
 ```
 
@@ -41,7 +39,6 @@ docker run -d --name whatshttp -p 3000:3000 -v /home/artur/data:/app/data arturc
 You can pass them with `-e`, Example:
 
 ```
-shell
 docker run -d \
   -p 3000:3000 \
   -v $(pwd)/data:/app/data \
@@ -49,8 +46,6 @@ docker run -d \
   -e DB_PATH=/app/data/database.sqlite \
   arturcsegat/whatshttp:latest
 ```
-
----
 
 #### Volumes
 

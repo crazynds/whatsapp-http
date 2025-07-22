@@ -228,7 +228,7 @@ export async function createClient(message_handler: ((msg: WAWebJS.Message) => P
             clientId: clientId
         }),
         puppeteer: {
-            args: ['--no-sandbox', '--disable-setuid-sandbox'],
+            args: ['--no-sandbox', '--disable-setuid-sandbox', '--user-data-dir=/tmp/chrome-user-data'],
             executablePath: '/usr/bin/google-chrome-stable',
         }
     });

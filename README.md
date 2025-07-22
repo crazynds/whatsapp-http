@@ -83,6 +83,8 @@ Send a text message to the chat.
 - `chatId` suffix logic applies as above.  
 - You may add `response_to_id` to send a response to a message by its serialized id  
 - You may add media to the message via mimetype (see example as the body is no longer JSON)
+- If sending audio file as media you may or may not add the `?voice=true` so to send it as your voice
+- Whatsapp only supports `.opus` audio files
 
 ### 6. Get Chat Messages  
 `GET /client/:clientId/chat/:chatId/messages[?group=true]`  

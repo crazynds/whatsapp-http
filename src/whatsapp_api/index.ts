@@ -72,50 +72,42 @@ export function JsonClient(client: Model<any, any>): object {
 }
 
 
-export async function sendMessage(
-    model: Model<any, any>,
-    chatId: string,
-    message: string | null,
-    mediaFile: Express.Multer.File | null = null,
-    responseToId: string | null = null
-) {
-    const clientId = model.get('clientId') as string | null;
-    const client = clients[clientId ?? ''];
-    if (!client) return false;
 
-    let quotedMessage: Message | undefined;
+export async function sendMessage(
+    model: Model<any, any>, chatId: string,
+    message: string | null = null,
+    mediaPath: string | null = null,
+    responseToId: string | null = null,
+    isAudio: boolean = false
+    ) {
+
+    const clientId = model.get('clientId') as string | null;
+    const client = clients[ clientId ?? ''];
+    if(!client) return false;
+
+    const chat = await client.getChatById(chatId);
+
+    const options: any = {};
 
     if (responseToId) {
-        quotedMessage = await client.getMessageById(responseToId);
+        options.quotedMessageId = responseToId;
     }
 
-    let msg;
-
-    if (mediaFile) {
-        const mimetype = mediaFile.mimetype;
-        const base64 = mediaFile.buffer.toString('base64');
-        const filename = mediaFile.originalname;
-
-        const media = new MessageMedia(mimetype, base64, filename);
-        msg = await client.sendMessage(chatId, media, {
-            caption: message ?? undefined,
-            quotedMessageId: quotedMessage?.id._serialized,
-        });
-    } else if (message) {
-        msg = await client.sendMessage(chatId, message, {
-            quotedMessageId: quotedMessage?.id._serialized,
-        });
-    } else {
-        throw new Error('You must provide either message or media');
+    if (mediaPath) {
+        const media = MessageMedia.fromFilePath(mediaPath);
+        if (message) options.caption = message;
+        options.sendAudioAsVoice = isAudio;
+        return await JsonMsg(await chat.sendMessage(media, options));
     }
 
-    return await JsonMsg(msg);
+    if (message) {
+        return await JsonMsg(await chat.sendMessage(message, options));
+    }
+
+    throw new Error('Nothing to send: no media or message');
 }
 
 export async function getMessage(model: Model<any, any>, messageId: string): Promise<object | false> {
-    const MEDIA_DIR = path.resolve('./media');
-    await fs.mkdir(MEDIA_DIR, { recursive: true });
-
     const clientId = model.get('clientId') as string | null;
     const client = clients[ clientId ?? ''];
     if(!client) return false;
@@ -237,6 +229,7 @@ export async function createClient(message_handler: ((msg: WAWebJS.Message) => P
         }),
         puppeteer: {
             args: ['--no-sandbox', '--disable-setuid-sandbox'],
+            executablePath: '/usr/bin/google-chrome-stable',
         }
     });
 
@@ -285,7 +278,6 @@ const MIME_MAP: Record<string, string> = {
     'video/mp4': 'mp4',
     'audio/ogg': 'ogg',
     'application/pdf': 'pdf',
-    // Add more as needed
 };
 
 function getExtension(mimetype: string): string {

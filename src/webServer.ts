@@ -3,14 +3,31 @@ import { createClient, getChatMessages, getChats, getChat, sendMessage, getConta
 import Client from './models/client';
 import QRCode from 'qrcode';
 import path from 'path';
-import fs from 'fs/promises';
+import fs from 'fs';
 
 export const port: number = parseInt(process.env.PORT ?? '3000');
 const server = express();
 server.use(express.json());
 
 import multer from 'multer';
-const upload = multer();
+import { isVNode } from 'vue';
+
+const uploadDir = path.join(process.cwd(), 'uploads');
+if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, uploadDir);
+    },
+    filename: (req, file, cb) => {
+        // Use original filename or customize here
+        cb(null, `${Date.now()}_${file.originalname}`);
+    }
+});
+
+const upload = multer({ storage });
 
 
 export default server;
@@ -128,19 +145,45 @@ export async function createWebServer() {
         const chatId = normalizeChatId(req.params.chatId, req.query.group as string | undefined);
         const { message, response_to_id } = req.body;
 
-        const mediaFile = req.file;
+        let finalMediaPath: string | null = null;
 
         try {
+            let isVoice: boolean = false;
+            if (req.file) {
+                isVoice = req.query.voice === 'true';
+
+                // Ensure ./media exists
+                const mediaDir = path.join(process.cwd(), 'media');
+                await fs.promises.mkdir(mediaDir, { recursive: true });
+
+                // Build final file path in ./media
+                const filename = `${Date.now()}_${req.file.originalname}`;
+                finalMediaPath = path.join(mediaDir, filename);
+
+                // Move file to ./media
+                await fs.promises.rename(req.file.path, finalMediaPath);
+            }
+
             const result = await sendMessage(
                 client,
                 chatId,
                 message ?? null,
-                mediaFile ?? null,
-                response_to_id ?? null
+                finalMediaPath,
+                response_to_id ?? null,
+                isVoice,
             );
+
             res.json(result);
         } catch (err) {
             res.status(500).json({ error: `error sending message: ${err}` });
+        } finally {
+            if (finalMediaPath) {
+                try {
+                    await fs.promises.unlink(finalMediaPath);
+                } catch (unlinkErr) {
+                    console.error(`Failed to delete media file: ${finalMediaPath}`, unlinkErr);
+                }
+            }
         }
     });
 
@@ -200,7 +243,7 @@ export async function createWebServer() {
             const filepath = path.resolve('./media', filename);
             res.sendFile(filepath, async (err) => {
                 try {
-                    await fs.unlink(filepath);
+                    await fs.promises.unlink(filepath);
                     if (err) {
                         console.error("Error sending file:", err);
                     }

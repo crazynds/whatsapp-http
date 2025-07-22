@@ -95,7 +95,7 @@ export async function createWebServer() {
         const client = await Client.findByPk(id);
 
         if (!client) return res.status(404).send('Client not found');
-        if (!client.get('ready')) return res.status(40).send('Client not ready');
+        if (!client.get('ready')) return res.status(400).send('Client not ready');
 
         try {
             const chats = await getChats(client);

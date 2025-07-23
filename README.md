@@ -34,7 +34,6 @@ docker run -d --name whatshttp -p 3000:3000 -v /home/artur/data:/app/data arturc
 #### Environment Variables
 
 - `PORT` – Port the server will run inside the container. Default: `3000`  
-- `DB_PATH` – Path to SQLite database. If not defined, clients will be stored in memory.
 
 You can pass them with `-e`, Example:
 
@@ -43,7 +42,6 @@ docker run -d \
   -p 3000:3000 \
   -v $(pwd)/data:/app/data \
   -e PORT=3000 \
-  -e DB_PATH=/app/data/database.sqlite \
   arturcsegat/whatshttp:latest
 ```
 

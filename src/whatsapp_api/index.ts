@@ -224,12 +224,13 @@ export async function createClient(message_handler: ((msg: WAWebJS.Message) => P
 
     const client = new Client({
         authStrategy: new LocalAuth({
-            dataPath: './data/',
-            clientId: clientId
+            dataPath: './data/' + clientId.toString(),
+            clientId: 'default'  
         }),
         puppeteer: {
-            args: ['--no-sandbox', '--disable-setuid-sandbox', '--user-data-dir=/tmp/chrome-user-data'],
+            headless: true,
             executablePath: '/usr/bin/google-chrome-stable',
+            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
         }
     });
 

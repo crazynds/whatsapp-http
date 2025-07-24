@@ -46,54 +46,76 @@ You'l be presented with a retry button until a qrcode appears or you session is 
 
 ## API Routes
 
-### 1. Get QR Code for Client  
+### Get QR Code for Client  
 `GET /client/qrCode?clientId=&webHook=`  
 Returns a QR code image to scan for WhatsApp login.  
 - `clientId` (optional): reuse existing client or create new.  
 - `webHook` (optional): URL to receive message webhook POSTs.
 
-### 2. Get Client Info  
+### Get Client Info  
 `GET /client/:clientId`  
 Returns client status including readiness, QR code data, and webhook URL.
 
-### 3. Get All Chats  
+### Get All Chats  
 `GET /client/:clientId/chat`  
 Lists all chats for the client. Client must be ready.
 
-### 4. Get Single Chat  
+### Get Single Chat  
 `GET /client/:clientId/chat/:chatId[?group=true]`  
 Returns chat info and associated contact details.  
 - If `chatId` lacks suffix, adds `@g.us` if `group=true`, otherwise `@c.us`.
 
-### 5. Send Message  
+### Send Message  
 `POST /client/:clientId/chat/:chatId/send`  
 Send a text message to the chat.  
 - JSON body: `{ "message": "text" }`  
 - `chatId` suffix logic applies as above.  
+- If `chatId` lacks suffix, adds `@g.us` if `group=true`, otherwise `@c.us`.
 - You may add `response_to_id` to send a response to a message by its serialized id  
 - You may add media to the message via mimetype (see example as the body is no longer JSON)
 - If sending audio file as media you may or may not add the `?voice=true` so to send it as your voice
 - Whatsapp only supports `.opus` audio files
 
-### 6. Get Chat Messages  
+### Change Chat State
+`POST /client/:clientId/chat/:chatId/state/:state`  
+sets the chat state to seen, recording(for 25s) or typing(for 25s)
+- `state` must be one of [seen, typing, recording] in any captalization
+
+### Get Chat Messages  
 `GET /client/:clientId/chat/:chatId/messages[?group=true]`  
 Returns last 200 messages from the chat.
 
-### 7. Get Message  
+### Get Message  
 `GET /client/:clientId/message/:messageId`  
-Get a message by its id  
+Get a message by its id   1
 - The `messageId` should be retrieved from the previous route.
 
-### 8. Donwload Media from Message  
+### Delete Message  
+`DELETE /client/:clientId/message/:messageId`  
+Delete a message by its id  
+- The `messageId` should be retrieved from the previous routes.
+
+### Forward Message  
+`POST /client/:clientId/message/:messageId/forward/:chatId`  
+Forward a message by its id to a chat by its id
+- The `messageId` should be retrieved from the previous routes.
+- If `chatId` lacks suffix, adds `@g.us` if `group=true`, otherwise `@c.us`.
+
+### Accept Invite to Group from Message
+`POST /client/:clientId/message/:messageId/accept`  
+Accepts a message's invite by its id  
+- The `messageId` should be retrieved from the previous routes.
+
+### Donwload Media from Message  
 `GET /client/:clientId/message/:messageId/media`  
 Returns file containing media for the message  
 - The `messageId` should be retrieved from the previous route.
 
-### 9. Get All Contacts  
+### Get All Contacts  
 `GET /client/:clientId/contact`  
 Returns all contacts for the client. Client must be ready.
 
-### 10. Get Contact by Chat ID  
+### Get Contact by Chat ID  
 `GET /client/:clientId/contact/:chatId[?group=true]`  
 Returns contact info for given chat ID, with suffix logic applied.
 
@@ -134,6 +156,11 @@ curl -X POST "http://localhost:3000/client/123/chat/456/send" \
     -d '{"message":"Hello from API!"}'
 ```
 
+### Set chat state
+```bash
+curl -X POST "http://localhost:3000/client/123/chat/456/state/seen" \
+```
+
 ### Send message in reply to another
 ```bash
 curl -X POST "http://localhost:3000/client/123/chat/456/send" \
@@ -171,6 +198,21 @@ curl -X POST "http://localhost:3000/client/123/chat/456/send?group=true" \
 ### Get message
 ```bash
 curl -X GET "http://localhost:3000/client/123/message/456"
+```
+
+### Delete message
+```bash
+curl -X DELETE "http://localhost:3000/client/123/message/456"
+```
+
+### Accept message's invite
+```bash
+curl -X POST "http://localhost:3000/client/123/message/456/accept"
+```
+
+### Forward a message
+```bash
+curl -X POST "http://localhost:3000/client/123/message/456/forward/123"
 ```
 
 ### Donwload media from message

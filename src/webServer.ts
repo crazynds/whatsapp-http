@@ -1,5 +1,5 @@
 import express, { Request, Response } from 'express';
-import { createClient, getChatMessages, getChats, getChat, sendMessage, getContact, getContacts, Message, JsonMsg, JsonClient, getMessageMedia, JsonChat, getMessage } from './whatsapp_api';
+import { createClient, getChatMessages, getChats, getChat, sendMessage, getContact, getContacts, Message, JsonMsg, JsonClient, getMessageMedia, JsonChat, getMessage, deleteMessage, forwardMessage, acceptMessageInvite, sentChatState, ChatState} from './whatsapp_api';
 import Client from './models/client';
 import QRCode from 'qrcode';
 import path from 'path';
@@ -186,6 +186,29 @@ export async function createWebServer() {
         }
     });
 
+    server.post('/client/:clientId/chat/:chatId/state/:state', async (req: Request, res: Response) => {
+        const client = await Client.findByPk(req.params.clientId);
+        if (!client) return res.status(404).send('Client not found');
+        if (!client.get('ready')) return res.status(400).send('Client not ready');
+
+        const chatId = normalizeChatId(req.params.chatId, req.query.group as string | undefined);
+        let state: ChatState = ChatState.RECORDING;
+
+        let state_s = req.params.state as string
+        state_s = state_s.toLowerCase()
+        if (state_s === "typing"   ) state = ChatState.TYPING
+        else if (state_s === "recording") state=ChatState.RECORDING
+        else if (state_s === "seen"     ) state=ChatState.SEEN
+        else res.status(400).json({ error: `invalid state, must be one of [seen, typing, recording]` });
+
+        try {
+            const chat = await sentChatState(client, chatId, state);
+            res.json(chat);
+        } catch (err) {
+            res.status(500).json({ error: `error getting chat: ${err}` });
+        }
+    });
+
     server.get('/client/:clientId/chat/:chatId/messages', async (req: Request, res: Response) => {
         const client = await Client.findByPk(req.params.clientId);
         if (!client) return res.status(404).send('Client not found');
@@ -213,6 +236,73 @@ export async function createWebServer() {
 
         try {
             const msg = await getMessage(client, messageId);
+            if (!msg) {
+                return res.status(404).json({ error: 'Message not found' });
+            }
+
+            res.json(msg);
+        } catch (err) {
+            res.status(500).json({ error: `error fetching media ${err}` });
+        }
+    });
+    server.delete('/client/:clientId/message/:messageId', async (req: Request, res: Response) => {
+        const client = await Client.findByPk(req.params.clientId);
+        if (!client || !client.get('ready')) return res.status(404).send('Not found');
+
+        if (!client) {
+            return res.status(404).json({ error: 'Client not found' });
+        }
+
+        const messageId = req.params.messageId;
+
+        try {
+            const msg = await deleteMessage(client, messageId);
+            if (!msg) {
+                return res.status(404).json({ error: 'Message not found' });
+            }
+
+            res.json(msg);
+        } catch (err) {
+            res.status(500).json({ error: `error fetching media ${err}` });
+        }
+    });
+
+    server.post('/client/:clientId/message/:messageId/forward/:to', async (req: Request, res: Response) => {
+        const client = await Client.findByPk(req.params.clientId);
+        if (!client || !client.get('ready')) return res.status(404).send('Not found');
+
+        if (!client) {
+            return res.status(404).json({ error: 'Client not found' });
+        }
+
+        const messageId = req.params.messageId;
+        let to = req.params.to;
+        to = normalizeChatId(to, req.query.group as string | undefined)
+
+        try {
+            const msg = await forwardMessage(client, messageId, to);
+            if (!msg) {
+                return res.status(404).json({ error: 'Message not found' });
+            }
+
+            res.json(msg);
+        } catch (err) {
+            res.status(500).json({ error: `error fetching media ${err}` });
+        }
+    });
+
+    server.post('/client/:clientId/message/:messageId/accept', async (req: Request, res: Response) => {
+        const client = await Client.findByPk(req.params.clientId);
+        if (!client || !client.get('ready')) return res.status(404).send('Not found');
+
+        if (!client) {
+            return res.status(404).json({ error: 'Client not found' });
+        }
+
+        const messageId = req.params.messageId;
+
+        try {
+            const msg = await acceptMessageInvite(client, messageId);
             if (!msg) {
                 return res.status(404).json({ error: 'Message not found' });
             }

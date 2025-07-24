@@ -13,6 +13,11 @@ export const clients = {
 export type Message = WAWebJS.Message;
 export type Chat = WAWebJS.Chat;
 export type Contact = WAWebJS.Contact;
+export enum ChatState {
+    TYPING,
+    SEEN,
+    RECORDING,
+}
 
 export async function JsonMsg(msg: Message): Promise<object> {
     const infos = await msg.getInfo();
@@ -24,6 +29,8 @@ export async function JsonMsg(msg: Message): Promise<object> {
         body: msg.body || '',
         timestamp: new Date(msg.timestamp * 1000),
         hasMedia: msg.hasMedia === true,
+        isVisOnce: msg.isEphemeral,
+        groupInvite: msg.inviteV4 ? msg.inviteV4 : null,
         isQuote:msg.hasQuotedMsg,
         quoteId: msg.hasQuotedMsg ? (await msg.getQuotedMessage()).id._serialized : null,
         isForwarded: msg.isForwarded || false,
@@ -37,6 +44,12 @@ export async function JsonMsg(msg: Message): Promise<object> {
 }
 
 export async function JsonChat(chat: Chat): Promise<object> {
+    const get_part = (chat: WAWebJS.GroupChat) => {
+        return chat.participants.map((p) => {
+            return {id: p.id._serialized, isAdmin: p.isAdmin}
+        })
+    }
+
     return {
         id: chat.id._serialized,
         name: chat.name,
@@ -44,6 +57,7 @@ export async function JsonChat(chat: Chat): Promise<object> {
         lastMessageBody: chat.lastMessage?.body ?? null,
         isArchived: chat.archived,
         isGroup: chat.isGroup,
+        groupMembers: chat.isGroup ? get_part(chat as WAWebJS.GroupChat) : null,
         isMuted: chat.isMuted,
         isReadOnly: chat.isReadOnly,
         isPinned: chat.pinned,
@@ -83,7 +97,7 @@ export async function sendMessage(
 
     const clientId = model.get('clientId') as string | null;
     const client = clients[ clientId ?? ''];
-    if(!client) return false;
+    if (!client) throw "Client not found";
 
     const chat = await client.getChatById(chatId);
 
@@ -110,9 +124,43 @@ export async function sendMessage(
 export async function getMessage(model: Model<any, any>, messageId: string): Promise<object | false> {
     const clientId = model.get('clientId') as string | null;
     const client = clients[ clientId ?? ''];
-    if(!client) return false;
+    if (!client) throw "Client not found";
 
     const msg = await client.getMessageById(messageId);
+    return await JsonMsg(msg);
+}
+export async function deleteMessage(model: Model<any, any>, messageId: string): Promise<object | false> {
+    const clientId = model.get('clientId') as string | null;
+    const client = clients[ clientId ?? ''];
+    if (!client) throw "Client not found";
+
+    const msg = await client.getMessageById(messageId);
+    await msg.delete(true)
+    return await JsonMsg(msg);
+}
+export async function forwardMessage(model: Model<any, any>, messageId: string, to: string): Promise<object | false> {
+    const clientId = model.get('clientId') as string | null;
+    const client = clients[ clientId ?? ''];
+    if (!client) throw "Client not found";
+
+    const msg = await client.getMessageById(messageId);
+    await msg.forward(to)
+    return await JsonMsg(msg);
+}
+
+export async function acceptMessageInvite(model: Model<any, any>, messageId: string): Promise<object | false> {
+    const clientId = model.get('clientId') as string | null;
+    const client = clients[ clientId ?? ''];
+    if (!client) throw "Client not found";
+    
+
+    const msg = await client.getMessageById(messageId);
+
+    if (!msg.inviteV4) {
+        throw "Message does not have invite"
+    }
+
+    await msg.acceptGroupV4Invite()
     return await JsonMsg(msg);
 }
 
@@ -122,7 +170,7 @@ export async function getMessageMedia(model: Model<any, any>, messageId: string)
 
     const clientId = model.get('clientId') as string | null;
     const client = clients[ clientId ?? ''];
-    if(!client) return false;
+    if (!client) throw "Client not found";
 
     const msg = await client.getMessageById(messageId);
     if (!msg.hasMedia) return false;
@@ -142,7 +190,7 @@ export async function getMessageMedia(model: Model<any, any>, messageId: string)
 export async function getChats(model: Model<any, any>) {
     const clientId = model.get('clientId') as string | null;
     const client = clients[clientId ?? ''];
-    if (!client) return false;
+    if (!client) throw "Client not found";
 
     const chats = await client.getChats();
 
@@ -155,16 +203,35 @@ export async function getChats(model: Model<any, any>) {
 export async function getChat(model: Model<any, any>, chatId: string) {
     const clientId = model.get('clientId') as string | null;
     const client = clients[clientId ?? ''];
-    if (!client) return false;
+    if (!client) throw "Client not found";
 
     const chat = await client.getChatById(chatId);
+
+    return await JsonChat(chat);
+}
+
+
+export async function sentChatState(model: Model<any, any>, chatId: string, state: ChatState) {
+    const clientId = model.get('clientId') as string | null;
+    const client = clients[clientId ?? ''];
+    if (!client) throw "Client not found";
+
+    const chat = await client.getChatById(chatId);
+    switch (state) {
+        case ChatState.TYPING:
+            await chat.sendStateTyping();
+        case ChatState.SEEN:
+            await chat.sendSeen();
+        case ChatState.RECORDING:
+            await chat.sendStateRecording();
+    }
 
     return await JsonChat(chat);
 }
 export async function getChatMessages(model: Model<any, any>, chatId: string, count: number) {
     const clientId = model.get('clientId') as string | null;
     const client = clients[clientId ?? ''];
-    if (!client) return false;
+    if (!client) throw "Client not found";
 
     const chat = await client.getChatById(chatId);
     if (!chat) return false;
@@ -181,7 +248,7 @@ export async function getChatMessages(model: Model<any, any>, chatId: string, co
 export async function getContacts(model: Model<any, any>) {
     const clientId = model.get('clientId') as string | null;
     const client = clients[clientId ?? ''];
-    if (!client) return false;
+    if (!client) throw "Client not found";
 
     const contacts = await client.getContacts();
 
@@ -197,7 +264,7 @@ export async function getContacts(model: Model<any, any>) {
 export async function getContact(model: Model<any, any>, chatId: string) {
     const clientId = model.get('clientId') as string | null;
     const client = clients[clientId ?? ''];
-    if (!client) return false;
+    if (!client) throw "Client not found";
 
     const chat = await client.getChatById(chatId);
     const contact = await chat.getContact();

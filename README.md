@@ -37,7 +37,9 @@ If you want you may passe in the query params `?clientId=your_client_id` this wi
 will resume the session. You may also pass a webhook with `?webHook=http://your.ip/yourwebhokurl.com`. With all that, the best is to open the following url in the browser
 
 `http://localhost:3000/client/qrCode?clientId=id`
+
 Or with a webhook
+
 `http://localhost:3000/client/qrCode?clientId=id&webHook=http://your.ip/webook`
 
 You'l be presented with a retry button until a qrcode appears or you session is restored. After this, you may use any of the following routes

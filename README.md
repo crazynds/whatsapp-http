@@ -2,10 +2,6 @@
 
 Docker container for whatsapp interaction over http
 
-## Getting Started
-
-These instructions cover the necessary information to use the Docker container.
-
 ### Prerequisites
 
 To run this container, you will need to have Docker installed.
@@ -14,44 +10,37 @@ To run this container, you will need to have Docker installed.
 * [OS X](https://docs.docker.com/mac/started/)
 * [Linux](https://docs.docker.com/linux/started/)
 
+## Getting Started
+
+### Instalation
+
+```bash
+docker pull arturcsegat/whatshttp:latest
+```
+
 ### Usage
-
-#### Container Parameters
-
-#### Container Parameters
-
-You can run the container with the following parameters:
-
-```
-docker run -v /your/path/data:/app/data arturcsegat/whatshttp:latest [parameters]
-```
 
 Basic usage example:
 ```
-docker run -d --name whatshttp -p 3000:3000 -v /home/artur/data:/app/data arturcsegat/whatshttp:latest
-```
-
-#### Environment Variables
-
-- `PORT` – Port the server will run inside the container. Default: `3000`  
-
-You can pass them with `-e`, Example:
-
-```
 docker run -d \
   -p 3000:3000 \
-  -v $(pwd)/data:/app/data \
+  -v /home/artur/data:/app/data \
   -e PORT=3000 \
   arturcsegat/whatshttp:latest
 ```
+This runs the container in detached mode saving the container data in the /home/artur/data directory.
 
-#### Volumes
+### Create a Session
 
-- `/app/data` – Directory where sessions are stored.
+To create a session you must call the `/client/qrCode` route (see API ROUTES). Calling this route will create a new whatsapp client with a default id.
+If you want you may passe in the query params `?clientId=your_client_id` this will save your client with a custom id, if you stop the container it will delete your clients, but if you run it again and create a client with the same ID it
+will resume the session. You may also pass a webhook with `?webHook=http://your.ip/yourwebhokurl.com`. With all that, the best is to open the following url in the browser
 
-To persist session data across restarts and container deletions, **bind this path to a local directory** (as shown above).
+`http://localhost:3000/client/qrCode?clientId=id`
+Or with a webhook
+`http://localhost:3000/client/qrCode?clientId=id&webHook=http://your.ip/webook`
 
----
+You'l be presented with a retry button until a qrcode appears or you session is restored. After this, you may use any of the following routes
 
 ## API Routes
 

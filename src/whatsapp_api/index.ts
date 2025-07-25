@@ -24,17 +24,17 @@ export async function JsonMsg(msg: Message): Promise<object> {
     return {
         id: msg.id._serialized,
         from: msg.from,
+        type: msg.type,
         group_member_from: msg.author,
         fromMe: msg.fromMe,
         body: msg.body || '',
         timestamp: new Date(msg.timestamp * 1000),
         hasMedia: msg.hasMedia === true,
-        isVisOnce: msg.isEphemeral,
         groupInvite: msg.inviteV4 ? msg.inviteV4 : null,
         isQuote:msg.hasQuotedMsg,
         quoteId: msg.hasQuotedMsg ? (await msg.getQuotedMessage()).id._serialized : null,
         isForwarded: msg.isForwarded || false,
-        mentionedIds: msg.mentionedIds ?? [],
+        mentionedIds: msg.mentionedIds.map((i: any) => {return i._serialized}) ?? [],
         info: infos ? {
             delivered: infos.delivery.length > 0,
             read: infos.read.length > 0,
@@ -323,14 +323,19 @@ export async function createClient(message_handler: ((msg: WAWebJS.Message) => P
         clientModel.save();
     });
 
-    if (message_handler) {
-        client.on('message', async (msg) => {
-            const a = await message_handler(msg);
-            if (!a) {
-                console.error("message_handler failed");
+    client.on('message', async (msg) => {
+        if (!message_handler) {
+            message_handler = async (msg: Message) => {
+                console.log(msg);
+                return true;
             }
-        });
-    }
+        }
+
+        const a = await message_handler(msg);
+        if (!a) {
+            console.error("message_handler failed");
+        }
+    });
 
     client.initialize();
     clients[clientId] = client

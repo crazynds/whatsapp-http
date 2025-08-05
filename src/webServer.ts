@@ -32,7 +32,7 @@ const upload = multer({ storage });
 export default server;
 
 function on_message(webHook: string | null) {
-    return async function (msg: Message) {
+    return async function (client:any, msg: Message) {
         if (webHook === null) {
             console.log(`${msg.from}: ${msg.body}`);
             console.log(msg)
@@ -40,7 +40,7 @@ function on_message(webHook: string | null) {
         }
 
         const chat = await msg.getChat();
-        const m = {chat: await JsonChat(chat), message: await JsonMsg(msg)};
+        const m = {client:JsonClient(client), chat: await JsonChat(chat), message: await JsonMsg(msg)};
         try {
             await fetch(webHook, {
                 method: 'POST',

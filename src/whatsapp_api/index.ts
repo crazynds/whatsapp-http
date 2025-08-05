@@ -273,7 +273,7 @@ export async function getContact(model: Model<any, any>, chatId: string) {
 }
 
 
-export async function createClient(message_handler: ((msg: WAWebJS.Message) => Promise<boolean>) | null = null, clientId: string | null = null) {
+export async function createClient(message_handler: ((client:Model<any, any>, msg: WAWebJS.Message) => Promise<boolean>) | null = null, clientId: string | null = null) {
     if (!clientId) {
         clientId = (await ClientModel.count() + 1).toString()
     }
@@ -325,13 +325,13 @@ export async function createClient(message_handler: ((msg: WAWebJS.Message) => P
 
     client.on('message', async (msg) => {
         if (!message_handler) {
-            message_handler = async (msg: Message) => {
+            message_handler = async (clientModel, msg: Message) => {
                 console.log(msg);
                 return true;
             }
         }
 
-        const a = await message_handler(msg);
+        const a = await message_handler(clientModel, msg);
         if (!a) {
             console.error("message_handler failed");
         }

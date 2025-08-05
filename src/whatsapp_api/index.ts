@@ -182,7 +182,7 @@ export async function getMessageMedia(model: Model<any, any>, messageId: string)
     const filename = `${msg.id.id}.${extension}`;
     const filepath = path.join(MEDIA_DIR, filename);
 
-    await fs.writeFile(filepath, Buffer.from(media.data, 'base64'));
+    await fs.writeFile(filepath, Buffer.from(media.data, 'base64').toString('binary'), 'binary');
 
     return filename;
 }

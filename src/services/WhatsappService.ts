@@ -43,7 +43,7 @@ export class WhatsappService {
       },
       debug(obj: any, msg?: string) {
         if (!msg) return;
-        logger.debug(msg, obj);
+        //logger.debug(msg, obj);
       },
       info(obj: any, msg?: string) {
         if (!msg) return;

@@ -89,6 +89,7 @@ export async function webhookHandler(
       ],
     };
     log.debug("Payload webhook: ", payload.entry[0]);
+    log.debug("Webhook URL: ", webhookUrl);
     if (webhookUrl) {
       await fetch(webhookUrl, {
         method: "POST",

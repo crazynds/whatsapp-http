@@ -58,9 +58,9 @@ export async function webhookHandler(
   messages: Message[],
   messageAcks: Message[]
 ) {
+  await client.reload();
   const webhookUrl = client.get("webHook");
   if (messages.length == 0 && messageAcks.length == 0) return true;
-  console.log(messages);
   try {
     const payload = {
       object: "whatsapp_web_account",
@@ -88,8 +88,10 @@ export async function webhookHandler(
         },
       ],
     };
-    log.debug("Payload webhook: ", payload.entry[0]);
-    log.debug("Webhook URL: ", webhookUrl);
+    log.debug("Payload webhook: ", {
+      entry: payload.entry[0],
+      url: webhookUrl,
+    });
     if (webhookUrl) {
       await fetch(webhookUrl, {
         method: "POST",

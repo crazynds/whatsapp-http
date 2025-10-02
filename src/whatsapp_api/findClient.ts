@@ -160,6 +160,7 @@ export async function findClient(clientId: any, can_create: boolean = false) {
       await clientModel.save();
     });
     waService.onUpdate(async (messages) => {
+      console.log(messages.map((message) => message.update));
       const a = await webhookHandler(
         clientModel,
         [],

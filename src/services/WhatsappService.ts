@@ -1,11 +1,7 @@
-// src/services/WhatsappService.ts
-
 import makeWASocket, {
   DisconnectReason,
   fetchLatestBaileysVersion,
   useMultiFileAuthState,
-  AnyMessageContent,
-  WAMessage,
   WASocket,
   BaileysEventMap,
 } from "baileys";
@@ -13,6 +9,32 @@ import { Boom } from "@hapi/boom";
 import * as path from "path";
 import logger from "../lib/logger";
 import { ILogger } from "baileys/lib/Utils/logger";
+
+const fetchLatestWaConnectVersion = async (options = {}) => {
+  try {
+    const response = await fetch("https://wppconnect.io/whatsapp-versions/", {
+      method: "GET",
+    });
+    if (!response.ok) {
+      throw new Boom(`Failed to fetch sw.js: ${response.statusText}`, {
+        statusCode: response.status,
+      });
+    }
+    const data = await response.text();
+    const regex = /(\d+)\.(\d+)\.(\d+)-alpha/g;
+    const match = regex.exec(data);
+    if (!match) {
+      return false;
+    }
+    const [full, major, minor, patch] = match;
+    return {
+      version: [Number(major), Number(minor), Number(patch)],
+      isLatest: true,
+    };
+  } catch (error) {
+    return false;
+  }
+};
 
 export class WhatsappService {
   private sock: WASocket | null = null;
@@ -31,7 +53,17 @@ export class WhatsappService {
       path.join(sessionDir, `${this.sessionId}`)
     );
 
-    const { version } = await fetchLatestBaileysVersion();
+    const waVersion = await fetchLatestWaConnectVersion();
+    const { version: baileysVersion } = await fetchLatestBaileysVersion();
+    console.log("baileysVersion", baileysVersion);
+
+    var version: any;
+    if (!waVersion) {
+      version = baileysVersion;
+    } else {
+      version = waVersion.version;
+      console.log("waVersion", version);
+    }
 
     const customLogger = {
       level: logger.level,
@@ -47,7 +79,14 @@ export class WhatsappService {
       },
       info(obj: any, msg?: string) {
         if (!msg) return;
-        logger.info(msg, obj);
+        switch (msg) {
+          case "connected to WA":
+          case "not logged in, attempting registration...":
+            logger.debug(msg, obj);
+            break;
+          default:
+            logger.info(msg, obj);
+        }
       },
       warn(obj: any, msg?: string) {
         if (!msg) return;
@@ -75,9 +114,16 @@ export class WhatsappService {
         if ("qrCode" in this.callbacks) this.callbacks["qrCode"](qr);
       }
       if (connection === "close") {
-        const shouldReconnect =
-          (lastDisconnect?.error as Boom)?.output?.statusCode !==
-          DisconnectReason.loggedOut;
+        console.log(connection, lastDisconnect?.error);
+        const shouldReconnect = [
+          DisconnectReason.connectionLost,
+          DisconnectReason.connectionReplaced,
+          DisconnectReason.connectionClosed,
+          DisconnectReason.restartRequired,
+          DisconnectReason.timedOut,
+          DisconnectReason.unavailableService,
+          DisconnectReason.unavailableService,
+        ].includes((lastDisconnect?.error as Boom)?.output?.statusCode);
         if (shouldReconnect) this.connect(sessionDir);
         else if ("close" in this.callbacks) this.callbacks["close"]();
       } else if (connection === "open") {

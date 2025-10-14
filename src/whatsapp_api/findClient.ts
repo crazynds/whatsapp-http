@@ -59,7 +59,8 @@ const convertBaileysMessageToWhatsappMessage = (message: WAMessage) => {
     hasQuotedMsg: !!message.message?.extendedTextMessage?.contextInfo,
     getQuotedMessage: async () => {
       return {
-        from: message.message?.extendedTextMessage?.contextInfo?.participant,
+        from:
+          message.message?.extendedTextMessage?.contextInfo?.participant ?? "",
         id: {
           id: message.message?.extendedTextMessage?.contextInfo?.stanzaId,
           remote:

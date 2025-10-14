@@ -45,7 +45,7 @@ const logger = winston.createLogger({
     new winston.transports.Console({
       format: combine(
         colorize({ all: true }),
-        timestamp({ format: "HH:mm:ss.SSS" }),
+        timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
         consoleFormat
       ),
     }),

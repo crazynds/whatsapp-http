@@ -200,10 +200,6 @@ We welcome contributions from the community!
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 🙏 Acknowledgments
-
-- [whatsapp-web.js](https://github.com/pedroslopez/whatsapp-web.js) - WhatsApp Web API
-
 ## 📬 Contact
 
 - [Crazynds](https://github.com/crazynds)

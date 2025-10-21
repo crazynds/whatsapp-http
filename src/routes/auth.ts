@@ -40,9 +40,10 @@ router.get("/qrCode", async (req: Request, res: Response) => {
     res.status(422).send("You need to provide some clientId");
     return;
   }
-
-  const client = await findClient(id, true);
-  if (!client) return res.status(404).send("Client not found");
+  var client;
+  do {
+    client = await findClient(id, true);
+  } while (!client);
   id = client.get("clientId") as string;
   if (wh) {
     client.set("webHook", wh);

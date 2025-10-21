@@ -9,6 +9,7 @@ import { Boom } from "@hapi/boom";
 import * as path from "path";
 import logger from "../lib/logger";
 import { ILogger } from "baileys/lib/Utils/logger";
+import fs from "fs";
 
 const fetchLatestWaConnectVersion = async (options = {}) => {
   try {
@@ -40,6 +41,8 @@ export class WhatsappService {
   private sock: WASocket | null = null;
   private sessionId: string;
   private callbacks: { [key: string]: CallableFunction } = {};
+  private sessionDir: string = "";
+  private status = "off";
 
   constructor(sessionId: string) {
     this.sessionId = sessionId;
@@ -52,19 +55,18 @@ export class WhatsappService {
     const { state, saveCreds } = await useMultiFileAuthState(
       path.join(sessionDir, `${this.sessionId}`)
     );
+    this.sessionDir = path.join(sessionDir, `${this.sessionId}`);
 
     const waVersion = await fetchLatestWaConnectVersion();
     const { version: baileysVersion } = await fetchLatestBaileysVersion();
-    console.log("baileysVersion", baileysVersion);
 
     var version: any;
     if (!waVersion) {
       version = baileysVersion;
     } else {
       version = waVersion.version;
-      console.log("waVersion", version);
     }
-
+    const sessionId = this.sessionId;
     const customLogger = {
       level: logger.level,
       child(obj: Record<string, any>) {
@@ -82,19 +84,19 @@ export class WhatsappService {
         switch (msg) {
           case "connected to WA":
           case "not logged in, attempting registration...":
-            logger.debug(msg, obj);
+            logger.debug(sessionId + " - " + msg, obj);
             break;
           default:
-            logger.info(msg, obj);
+            logger.info(sessionId + " - " + msg, obj);
         }
       },
       warn(obj: any, msg?: string) {
         if (!msg) return;
-        logger.warn(msg, obj);
+        logger.warn(sessionId + " - " + msg, obj);
       },
       error(obj: any, msg?: string) {
         if (!msg) return;
-        logger.error(msg, obj);
+        logger.error(sessionId + " - " + msg, obj);
       },
     } as ILogger;
     this.sock = makeWASocket({
@@ -106,15 +108,17 @@ export class WhatsappService {
       logger: customLogger,
     });
 
+    this.status = "started";
+
     this.sock.ev.on("creds.update", saveCreds);
 
     this.sock.ev.on("connection.update", (update) => {
       const { connection, lastDisconnect, qr } = update;
       if (qr) {
+        this.status = "qrCode";
         if ("qrCode" in this.callbacks) this.callbacks["qrCode"](qr);
       }
       if (connection === "close") {
-        console.log(connection, lastDisconnect?.error);
         const shouldReconnect = [
           DisconnectReason.connectionLost,
           DisconnectReason.connectionReplaced,
@@ -125,8 +129,13 @@ export class WhatsappService {
           DisconnectReason.unavailableService,
         ].includes((lastDisconnect?.error as Boom)?.output?.statusCode);
         if (shouldReconnect) this.connect(sessionDir);
-        else if ("close" in this.callbacks) this.callbacks["close"]();
+        else if ("close" in this.callbacks) {
+          logger.error("Disconected, reason: ", lastDisconnect?.error);
+          this.status = "closed";
+          this.callbacks["close"]();
+        }
       } else if (connection === "open") {
+        this.status = "opened";
         if ("open" in this.callbacks) this.callbacks["open"]();
       }
     });
@@ -231,5 +240,11 @@ export class WhatsappService {
 
   public async destroy() {
     await this.logout();
+    // delete session dir folder
+    fs.rmdirSync(this.sessionDir, { recursive: true });
+  }
+
+  public getStatus() {
+    return this.status;
   }
 }

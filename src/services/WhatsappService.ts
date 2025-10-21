@@ -11,6 +11,12 @@ import logger from "../lib/logger";
 import { ILogger } from "baileys/lib/Utils/logger";
 import fs from "fs";
 
+interface ChatInfo {
+  id: string;
+  name: string;
+  isGroup: boolean;
+}
+
 const fetchLatestWaConnectVersion = async (options = {}) => {
   try {
     const response = await fetch("https://wppconnect.io/whatsapp-versions/", {
@@ -86,8 +92,11 @@ export class WhatsappService {
           case "not logged in, attempting registration...":
             logger.debug(sessionId + " - " + msg, obj);
             break;
+          case "logging in...":
+            logger.info(sessionId + " - " + msg);
+            break;
           default:
-            logger.info(sessionId + " - " + msg, obj);
+            logger.info(sessionId + " - " + msg);
         }
       },
       warn(obj: any, msg?: string) {
@@ -160,7 +169,9 @@ export class WhatsappService {
         contacts: newContacts,
         messages: newMessages,
         syncType,
-      }) => {}
+      }) => {
+        //console.log(newChats, newContacts, newMessages, syncType);
+      }
     );
     this.sock.ev.on("creds.update", (creds) => {
       if ("credentials" in this.callbacks) this.callbacks["credentials"](creds);
@@ -203,11 +214,11 @@ export class WhatsappService {
    */
   public async sendMessage(to: string, message: string) {
     if (!this.sock) throw new Error("Socket não inicializado");
-    const jid = to.includes("@s.whatsapp.net") ? to : `${to}@s.whatsapp.net`;
+    const jid = to.includes("@") ? to : `${to}@s.whatsapp.net`;
     this.sock.sendPresenceUpdate("available");
     this.sock.sendPresenceUpdate("composing", jid);
     await new Promise((resolve) =>
-      setTimeout(resolve, Math.log2((message?.length ?? 0) + 10) * 1000)
+      setTimeout(resolve, Math.log2((message?.length ?? 0) + 10) * 700)
     );
     this.sock.sendPresenceUpdate("available", jid);
     await this.sock.sendMessage(jid, { text: message });
@@ -225,9 +236,8 @@ export class WhatsappService {
   // /**
   //  * Retorna os chats
   //  */
-  // public getChats() {
-  //   if (!this.sock) throw new Error("Socket não inicializado");
-  //   return this.sock.store?.chats || {};
+  // public async listActiveChats(): Promise<ChatInfo[]> {
+
   // }
 
   /**
@@ -241,7 +251,7 @@ export class WhatsappService {
   public async destroy() {
     await this.logout();
     // delete session dir folder
-    fs.rmdirSync(this.sessionDir, { recursive: true });
+    await fs.rm(this.sessionDir, { recursive: true }, () => {});
   }
 
   public getStatus() {

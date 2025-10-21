@@ -68,6 +68,7 @@ When a webhook URL is configured, the server will send HTTP POST requests with t
               "display_phone_number": $whatsappWebName,
               "phone_number_id": $clientId
             },
+            "contacts"
             "messages": [
               {
                 "from": $senderPhoneNumber,
@@ -76,6 +77,16 @@ When a webhook URL is configured, the server will send HTTP POST requests with t
                 "type": "text",
                 "text": {
                   "body": $message_content,
+                  "audio64":{
+                    "data": $base64_audio,
+                    "mimetype": $mime_type,
+                    "filesize": $filesize,
+                  }
+                },
+                "context": {
+                  "group_id": $group_id,
+                  "id": $replied_message_id,
+                  "from": $id_user_replied
                 }
               },
               ...

@@ -1,97 +1,172 @@
 import { Chat, Message, MessageAck, MessageTypes } from "whatsapp-web.js";
 import log from "../lib/logger";
+import { Model } from "@sequelize/core";
+import {
+  WhatsAppChange,
+  WhatsAppContact,
+  WhatsAppMessage,
+  WhatsAppMessageType,
+  WhatsAppStatus,
+  WhatsAppWebhookPayload,
+} from "../types/MetaAPI";
+import { downloadMediaMessage, WAMessage } from "baileys";
 
-function formatStatus(messageAck: Message) {
-  const acks = {
-    [MessageAck.ACK_ERROR]: "error",
-    [MessageAck.ACK_PENDING]: "pending",
-    [MessageAck.ACK_SERVER]: "delivered",
-    [MessageAck.ACK_DEVICE]: "sent",
-    [MessageAck.ACK_READ]: "read",
-    [MessageAck.ACK_PLAYED]: "read",
+function formatStatus(messageAck: WAMessage): WhatsAppStatus {
+  const acks: {
+    [key: number]: "sent" | "delivered" | "read" | "failed" | "deleted";
+  } = {
+    [0]: "failed",
+    [1]: "sent",
+    [2]: "sent",
+    [3]: "delivered",
+    [4]: "read",
+    [5]: "read",
   };
   return {
-    id: messageAck.id._serialized,
-    status: acks[messageAck.ack],
+    id: messageAck.key.id || "",
+    status: acks[messageAck.status ?? 0],
     timestamp: Math.floor(Date.now()).toString(),
-    recipient_id: messageAck.from,
+    recipient_id: messageAck.key.remoteJid || "",
   };
 }
 
-async function formatMessage(message: Message) {
-  const quote = message.hasQuotedMsg
-    ? await message.getQuotedMessage()
-    : undefined;
+async function downloadMedia(message: WAMessage) {
+  if (!message.message?.audioMessage)
+    return {
+      data: "",
+      mimetype: "",
+      filesize: 0,
+      filename: "",
+    };
+  const buffer = await downloadMediaMessage(message, "buffer", {});
+  const base64Audio = buffer.toString("base64");
+  const mimetype = message.message.audioMessage.mimetype || "audio/ogg";
+  var fileSize = message.message.audioMessage.fileLength || buffer.length;
+  if (typeof fileSize == "object") {
+    fileSize = fileSize.toNumber();
+  }
+  return {
+    data: base64Audio,
+    mimetype,
+    filesize: fileSize,
+    filename: message.message.audioMessage.url ?? "",
+  };
+}
 
-  const types = {} as { [key: string]: string };
-  types[MessageTypes.TEXT] = "text";
-  types[MessageTypes.AUDIO] = "audio64";
-  types[MessageTypes.GROUP_NOTIFICATION] = "text";
+async function formatMessage(message: WAMessage): Promise<WhatsAppMessage> {
+  const quote = !!message.message?.extendedTextMessage?.contextInfo
+    ? {
+        from: (
+          message.message?.extendedTextMessage?.contextInfo?.participant ?? ""
+        ).split("@")[0],
+        id: message.message?.extendedTextMessage?.contextInfo?.stanzaId ?? "",
+      }
+    : undefined;
+  const isGroup = message.key.remoteJid?.includes("@g.us") ?? false;
 
   return {
-    from: message.from.split("@")[0],
-    id: message.id._serialized,
-    timestamp: Math.floor(message.timestamp).toString(),
-    type: types[message.type],
-    text:
-      message.type == MessageTypes.TEXT ||
-      message.type == MessageTypes.GROUP_NOTIFICATION
-        ? {
-            body: message.body,
-          }
-        : message.type == MessageTypes.AUDIO
-        ? {
-            audio: await message.downloadMedia(),
-          }
-        : {},
-    context: quote
+    from:
+      message.key.participantAlt?.split("@")[0] ??
+      message.key.remoteJidAlt?.split("@")[0] ??
+      "",
+    id: message.key.id ?? "",
+    timestamp: Math.floor(Number(message.messageTimestamp)).toString(),
+    type: message.message?.audioMessage ? "audio64" : "text",
+    text: !!message.message?.audioMessage
       ? {
-          from: quote.from.split("@")[0],
-          id: quote.id._serialized,
+          audio: await downloadMedia(message),
         }
-      : undefined,
+      : {
+          body: message.message?.extendedTextMessage
+            ? message.message.extendedTextMessage.text ?? ""
+            : message.message?.conversation ?? "",
+        },
+    context:
+      isGroup || quote
+        ? {
+            ...(quote ?? {}),
+            group_id: isGroup ? message.key.remoteJid ?? "" : undefined,
+          }
+        : undefined,
+  };
+}
+
+async function buildMessageChange(
+  client: Model<any, any>,
+  messages: WAMessage[]
+): Promise<WhatsAppChange> {
+  const contacts = messages.map((message) => ({
+    profile: {
+      name: message.pushName ?? "",
+      lid: message.key.participant ?? message.key.remoteJid ?? "",
+    },
+    wa_id:
+      message.key.remoteJidAlt?.split("@")[0] ??
+      message.key.participantAlt?.split("@")[0] ??
+      "",
+  }));
+  return {
+    value: {
+      messaging_product: "whatsapp",
+      metadata: {
+        display_phone_number: client.get("name") as string,
+        phone_number_id: client.get("clientId") as string,
+      },
+      contacts: contacts,
+      messages: await Promise.all(messages.map(formatMessage)),
+    },
+    field: "messages",
+  };
+}
+async function buildStatusChange(
+  client: Model<any, any>,
+  messageAcks: WAMessage[]
+): Promise<WhatsAppChange> {
+  console.log(messageAcks?.map(formatStatus));
+  return {
+    value: {
+      messaging_product: "whatsapp",
+      metadata: {
+        display_phone_number: client.get("name") as string,
+        phone_number_id: client.get("clientId") as string,
+      },
+      statuses: messageAcks?.map(formatStatus),
+    },
+    field: "message_status",
   };
 }
 
 export async function webhookHandler(
-  client: any,
-  messages: Message[],
-  messageAcks: Message[]
+  client: Model<any, any>,
+  messages: WAMessage[],
+  messageAcks: WAMessage[]
 ) {
-  await client.reload();
-  const webhookUrl = client.get("webHook");
   if (messages.length == 0 && messageAcks.length == 0) return true;
+  await client.reload();
+  const webhookUrl = client.get("webHook") as string | null;
   try {
-    const payload = {
+    const payload: WhatsAppWebhookPayload = {
       object: "whatsapp_web_account",
       entry: [
         {
-          id: client.get("clientId"),
-          changes: [
-            {
-              value: {
-                messaging_product: "whatsapp",
-                metadata: {
-                  display_phone_number: client.get("name"),
-                  phone_number_id: client.get("clientId"),
-                },
-                messages: await Promise.all(
-                  messages
-                    .filter((m) => m.type != MessageTypes.GROUP_NOTIFICATION)
-                    .map(formatMessage)
-                ),
-                statuses: messageAcks?.map(formatStatus),
-              },
-              field: "messages",
-            },
-          ],
+          id: client.get("clientId") as string,
+          changes: [] as any[],
         },
       ],
     };
+    if (messages.length > 0) {
+      payload.entry[0].changes.push(await buildMessageChange(client, messages));
+    }
+    if (messageAcks.length > 0) {
+      payload.entry[0].changes.push(
+        await buildStatusChange(client, messageAcks)
+      );
+    }
     log.debug("Payload webhook: ", {
       entry: payload.entry[0],
       url: webhookUrl,
     });
+    console.log(payload.entry[0].changes[0].value.messages ?? "");
     if (webhookUrl) {
       await fetch(webhookUrl, {
         method: "POST",

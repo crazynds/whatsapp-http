@@ -16,71 +16,6 @@ import { WhatsappService } from "../services/WhatsappService";
 import { WAMessage } from "baileys";
 import { downloadMediaMessage } from "baileys";
 
-const convertBaileysMessageToWhatsappMessage = (message: WAMessage) => {
-  if (
-    !message.message?.extendedTextMessage?.text &&
-    !message.message?.conversation &&
-    !message.message?.audioMessage
-  ) {
-    return {
-      ack: MessageAck.ACK_ERROR,
-    } as Message;
-  }
-  return {
-    ack: message.status || MessageAck.ACK_SERVER,
-    deviceType: "",
-    body: message.message?.extendedTextMessage
-      ? message.message.extendedTextMessage.text
-      : message.message?.conversation || "",
-    timestamp: message.messageTimestamp,
-    broadcast: message.broadcast,
-    hasMedia: !!message.message?.imageMessage,
-    type: message.message?.audioMessage
-      ? MessageTypes.AUDIO
-      : message.message.senderKeyDistributionMessage
-      ? MessageTypes.GROUP_NOTIFICATION
-      : MessageTypes.TEXT,
-    downloadMedia: async () => {
-      if (!message.message?.audioMessage) return {};
-      const buffer = await downloadMediaMessage(message, "buffer", {});
-      const base64Audio = buffer.toString("base64");
-      const mimetype = message.message.audioMessage.mimetype || "audio/ogg";
-      var fileSize = message.message.audioMessage.fileLength || buffer.length;
-      if (typeof fileSize == "object") {
-        fileSize = fileSize.toNumber();
-      }
-      return {
-        data: base64Audio,
-        mimetype,
-        filesize: fileSize,
-        filename: null,
-      } as MessageMedia;
-    },
-    hasQuotedMsg: !!message.message?.extendedTextMessage?.contextInfo,
-    getQuotedMessage: async () => {
-      return {
-        from:
-          message.message?.extendedTextMessage?.contextInfo?.participant ?? "",
-        id: {
-          id: message.message?.extendedTextMessage?.contextInfo?.stanzaId,
-          remote:
-            message.message?.extendedTextMessage?.contextInfo?.participant,
-          _serialized:
-            message.message?.extendedTextMessage?.contextInfo?.stanzaId,
-        },
-      };
-    },
-    from: message.key.remoteJid,
-    fromMe: message.key.fromMe,
-    id: {
-      _serialized: message.key.id,
-      fromMe: message.key.fromMe,
-      id: message.key.id,
-      remote: message.key.remoteJid,
-    },
-  } as Message;
-};
-
 export async function findClient(clientId: any, can_create: boolean = false) {
   const opts: FindOrCreateOptions = {
     where: { clientId: clientId },
@@ -156,33 +91,14 @@ export async function findClient(clientId: any, can_create: boolean = false) {
       });
       waService.onCredentials(async (creds) => {
         clientModel.set({
-          name: creds.me?.name,
+          name: creds.me?.id,
           phoneId: creds.me?.id,
           ready: true,
         });
         await clientModel.save();
       });
       waService.onUpdate(async (messages) => {
-        console.log(messages.map((message) => message.update));
-        const a = await webhookHandler(
-          clientModel,
-          [],
-          messages
-            .filter((message) => !!message.update.status)
-            .map(
-              (message) =>
-                ({
-                  ack: message.update.status ?? MessageAck.ACK_ERROR,
-                  id: {
-                    id: message.key.id,
-                    fromMe: message.key.fromMe,
-                    remote: message.key.remoteJid,
-                    _serialized: message.key.id,
-                  },
-                  from: message.key.remoteJid,
-                } as Message)
-            )
-        );
+        const a = await webhookHandler(clientModel, [], messages);
         // messages.forEach(async (message) => {
         //   switch (message.update.keepInChat) {
         //   case MessageAck.ACK_ERROR:
@@ -206,17 +122,14 @@ export async function findClient(clientId: any, can_create: boolean = false) {
       waService.onMessage(async ({ messages }) => {
         const a = await webhookHandler(
           clientModel,
-          messages
-            .map(convertBaileysMessageToWhatsappMessage)
-            .filter((message) => {
-              console.log(message);
-              return (
-                message.ack !== MessageAck.ACK_ERROR &&
-                //!message.fromMe &&
-                message.from &&
-                message.type != MessageTypes.GROUP_NOTIFICATION
-              );
-            }),
+          messages.filter((message) => {
+            return (
+              message.status !== 0 &&
+              message.key.remoteJid &&
+              message.key.id &&
+              !message.key.fromMe
+            );
+          }),
           []
         );
       });

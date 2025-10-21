@@ -97,7 +97,7 @@ export async function findClient(clientId: any, can_create: boolean = false) {
       const waService = new WhatsappService(clientId.toString());
 
       const disconectEvent = async () => {
-        log.warn("Client disconected: " + clientModel.get("name"));
+        log.warn("Client disconected: " + clientId);
         const wh = clientModel.get("webHook") as string | null;
         delete clients[clientId];
         clientModel.set({
@@ -132,7 +132,8 @@ export async function findClient(clientId: any, can_create: boolean = false) {
             });
           } catch (ex) {}
         }
-        deleteClient(clientModel.get("clientId"));
+        deleteClient(clientModel.get("clientId")); // Delete model from database
+        waService.destroy(); // Clear session dir and close connection
         resolve(false);
       };
 

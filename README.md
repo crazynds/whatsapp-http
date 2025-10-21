@@ -80,6 +80,16 @@ When a webhook URL is configured, the server will send HTTP POST requests with t
               },
               ...
             ]
+          },
+          "field": "messages"
+        },
+        {
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": {
+              "display_phone_number": $whatsappWebName,
+              "phone_number_id": $clientId
+            },
             "statuses": [
               {
                 "id": $messageId,
@@ -90,7 +100,7 @@ When a webhook URL is configured, the server will send HTTP POST requests with t
               ...
             ]
           },
-          "field": "messages"
+          "field": "message_status"
         }
       ]
     },

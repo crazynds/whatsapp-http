@@ -154,7 +154,7 @@ const router = express.Router();
  *         required: true
  *         schema:
  *           type: string
- *         description: The chat ID (without @c.us or @g.us suffix)
+ *         description: The chat ID (send with @g.us suffix to send to a group chat)
  *     requestBody:
  *       required: true
  *       content:

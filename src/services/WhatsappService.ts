@@ -244,12 +244,16 @@ export class WhatsappService {
    * Desloga e encerra a sessão
    */
   public async logout() {
-    if (!this.sock) throw new Error("Socket não inicializado");
-    await this.sock.logout();
+    try {
+      if (!this.sock) throw new Error("Socket não inicializado");
+      await this.sock.logout();
+    } catch (e) {}
   }
 
   public async destroy() {
-    await this.logout();
+    try {
+      await this.logout();
+    } catch (e) {}
     // delete session dir folder
     await fs.rm(this.sessionDir, { recursive: true }, () => {});
   }

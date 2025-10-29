@@ -122,7 +122,6 @@ async function buildStatusChange(
   client: Model<any, any>,
   messageAcks: WAMessage[]
 ): Promise<WhatsAppChange> {
-  console.log(messageAcks?.map(formatStatus));
   return {
     value: {
       messaging_product: "whatsapp",

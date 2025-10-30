@@ -63,11 +63,11 @@ async function formatMessage(message: WAMessage): Promise<WhatsAppMessage> {
       }
     : undefined;
   const isGroup = message.key.remoteJid?.includes("@g.us") ?? false;
-
+  console.log("message", message.key);
   return {
     from:
+      message.key.remoteJid?.split("@")[0] ??
       message.key.participantAlt?.split("@")[0] ??
-      message.key.remoteJidAlt?.split("@")[0] ??
       "",
     id: message.key.id ?? "",
     timestamp: Math.floor(Number(message.messageTimestamp)).toString(),
@@ -101,7 +101,7 @@ async function buildMessageChange(
       lid: message.key.participant ?? message.key.remoteJid ?? "",
     },
     wa_id:
-      message.key.remoteJidAlt?.split("@")[0] ??
+      message.key.remoteJid?.split("@")[0] ??
       message.key.participantAlt?.split("@")[0] ??
       "",
   }));

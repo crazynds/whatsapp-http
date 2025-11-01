@@ -43,7 +43,11 @@ async function downloadMedia(message: WAMessage) {
   const mimetype = message.message.audioMessage.mimetype || "audio/ogg";
   var fileSize = message.message.audioMessage.fileLength || buffer.length;
   if (typeof fileSize == "object") {
-    fileSize = fileSize.toNumber();
+    try {
+      fileSize = Number(fileSize);
+    } catch (e) {
+      fileSize = 0;
+    }
   }
   return {
     data: base64Audio,
@@ -63,7 +67,7 @@ async function formatMessage(message: WAMessage): Promise<WhatsAppMessage> {
       }
     : undefined;
   const isGroup = message.key.remoteJid?.includes("@g.us") ?? false;
-  console.log("message", message.key);
+  console.log("message", message);
   return {
     from:
       message.key.remoteJid?.split("@")[0] ??

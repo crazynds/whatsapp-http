@@ -122,14 +122,23 @@ export async function findClient(clientId: any, can_create: boolean = false) {
       waService.onMessage(async ({ messages }) => {
         const a = await webhookHandler(
           clientModel,
-          messages.filter((message) => {
-            return (
-              message.status !== 0 &&
-              message.key.remoteJid &&
-              message.key.id &&
-              !message.key.fromMe
-            );
-          }),
+          messages
+            .filter((message) => {
+              return (
+                message.status !== 0 &&
+                message.key.remoteJid &&
+                message.key.id &&
+                !message.key.fromMe
+              );
+            })
+            .filter((message) => {
+              return (
+                message.message?.audioMessage ||
+                (message.message?.extendedTextMessage
+                  ? message.message.extendedTextMessage.text ?? ""
+                  : message.message?.conversation ?? "")
+              );
+            }),
           []
         );
       });

@@ -10,6 +10,7 @@ import {
   WhatsAppWebhookPayload,
 } from "../types/MetaAPI";
 import { downloadMediaMessage, WAMessage } from "baileys";
+import logger from "../lib/logger";
 
 function formatStatus(messageAck: WAMessage): WhatsAppStatus {
   const acks: {
@@ -67,7 +68,7 @@ async function formatMessage(message: WAMessage): Promise<WhatsAppMessage> {
       }
     : undefined;
   const isGroup = message.key.remoteJid?.includes("@g.us") ?? false;
-  console.log("message", message);
+  logger.debug("message", message);
   return {
     from:
       message.key.remoteJid?.split("@")[0] ??
@@ -166,10 +167,9 @@ export async function webhookHandler(
       );
     }
     log.debug("Payload webhook: ", {
-      entry: payload.entry[0],
+      entry: payload.entry[0].changes,
       url: webhookUrl,
     });
-    console.log(payload.entry[0].changes[0].value.messages ?? "");
     if (webhookUrl) {
       await fetch(webhookUrl, {
         method: "POST",

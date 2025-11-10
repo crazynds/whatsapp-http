@@ -135,7 +135,6 @@ export class WhatsappService {
           DisconnectReason.restartRequired,
           DisconnectReason.timedOut,
           DisconnectReason.unavailableService,
-          DisconnectReason.unavailableService,
         ].includes((lastDisconnect?.error as Boom)?.output?.statusCode);
         if (shouldReconnect) this.connect(sessionDir);
         else if ("close" in this.callbacks) {

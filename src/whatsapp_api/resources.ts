@@ -49,7 +49,7 @@ export async function JsonChat(chat: Chat): Promise<object> {
     groupMembers: chat.isGroup ? get_part(chat as WAWebJS.GroupChat) : null,
     isMuted: chat.isMuted,
     isReadOnly: chat.isReadOnly,
-    isPinned: chat.pinned,
+    //isPinned: chat.pinned,
   };
 }
 

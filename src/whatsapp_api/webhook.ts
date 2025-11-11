@@ -71,9 +71,11 @@ async function formatMessage(message: WAMessage): Promise<WhatsAppMessage> {
   logger.debug("message", message);
   return {
     from:
-      message.key.remoteJid?.split("@")[0] ??
-      message.key.participantAlt?.split("@")[0] ??
-      "",
+      message.key.addressingMode == "pn"
+        ? message.key.remoteJid?.split("@")[0] ?? ""
+        : message.key.participantAlt?.split("@")[0] ??
+          message.key.participant?.split("@")[0] ??
+          "",
     id: message.key.id ?? "",
     timestamp: Math.floor(Number(message.messageTimestamp)).toString(),
     type: message.message?.audioMessage ? "audio64" : "text",

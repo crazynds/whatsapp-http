@@ -93,6 +93,7 @@ async function formatMessage(message: WAMessage): Promise<WhatsAppMessage> {
             group_id: isGroup ? message.key.remoteJid ?? "" : undefined,
           }
         : undefined,
+    fullBody: JSON.stringify(message),
   };
 }
 

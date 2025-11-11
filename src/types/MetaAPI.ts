@@ -88,6 +88,7 @@ export interface WhatsAppMessage {
     payload: string;
     text: string;
   };
+  fullBody?: string;
 }
 
 /** Tipos possíveis de mensagem */

@@ -73,6 +73,8 @@ async function formatMessage(message: WAMessage): Promise<WhatsAppMessage> {
     from:
       message.key.addressingMode == "pn"
         ? message.key.remoteJid?.split("@")[0] ?? ""
+        : !isGroup
+        ? message.key.remoteJidAlt?.split("@")[0] ?? ""
         : message.key.participantAlt?.split("@")[0] ??
           message.key.participant?.split("@")[0] ??
           "",

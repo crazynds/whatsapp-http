@@ -125,6 +125,8 @@ const router = express.Router();
 // });
 
 async function getWhatsAppId(rawId: string): Promise<string> {
+  let suffix =
+    rawId.split("@").length > 1 ? `@${rawId.split("@")[1]}` : "@s.whatsapp.net";
   let id = rawId.replace(/[^\d+]/g, "");
 
   if (!id.startsWith("+")) {
@@ -138,11 +140,7 @@ async function getWhatsAppId(rawId: string): Promise<string> {
       id = id.slice(0, 5) + id.slice(6);
     }
   }
-  id = id.replace("+", "");
-
-  if (!id.endsWith("@g.us") && !id.endsWith("@s.whatsapp.net")) {
-    id = id.includes("-") ? `${id}@g.us` : `${id}@s.whatsapp.net`;
-  }
+  id = id.replace("+", "") + suffix;
 
   return id;
 }

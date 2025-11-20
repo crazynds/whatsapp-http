@@ -240,6 +240,14 @@ export class WhatsappService {
 
   // }
 
+  public async checkNumber(number: string) {
+    if (!this.sock) throw new Error("Socket não inicializado");
+    const resp = await this.sock.onWhatsApp(number);
+    console.log(resp);
+    if (!resp || resp?.length <= 0 || !resp[0]) return false;
+    return resp[0].exists;
+  }
+
   /**
    * Desloga e encerra a sessão
    */

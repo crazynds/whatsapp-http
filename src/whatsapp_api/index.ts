@@ -33,6 +33,14 @@ function getExtension(mimetype: string): string {
   return MIME_MAP[mimetype] || "bin";
 }
 
+export async function checkNumber(model: Model<any, any>, number: string) {
+  const clientId = model.get("clientId") as string | null;
+  const client = clients[clientId ?? ""];
+  if (!client) throw "Client not found";
+
+  return await client.checkNumber(number);
+}
+
 export async function sendMessage(
   model: Model<any, any>,
   chatId: string,

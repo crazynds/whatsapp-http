@@ -12,7 +12,7 @@ import {
 import { downloadMediaMessage, WAMessage } from "baileys";
 import logger from "../lib/logger";
 
-function formatStatus(messageAck: WAMessage): WhatsAppStatus {
+function formatStatus(messageAck: any): WhatsAppStatus {
   const acks: {
     [key: number]: "sent" | "delivered" | "read" | "failed" | "deleted";
   } = {
@@ -25,7 +25,7 @@ function formatStatus(messageAck: WAMessage): WhatsAppStatus {
   };
   return {
     id: messageAck.key.id || "",
-    status: acks[messageAck.status ?? 0],
+    status: acks[messageAck.update.status ?? 0],
     timestamp: Math.floor(Date.now()).toString(),
     recipient_id: messageAck.key.remoteJid || "",
   };

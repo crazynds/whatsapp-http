@@ -33,7 +33,7 @@ const consoleFormat = printf(({ level, message, timestamp, ...meta }) => {
 
 // Create logger instance
 const logger = winston.createLogger({
-  level: process.env.LOG_LEVEL || "debug",
+  level: process.env.LOG_LEVEL || "http",
   levels,
   format: combine(
     timestamp({ format: "YYYY-MM-DD HH:mm:ss.SSS" }),

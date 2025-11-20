@@ -1,5 +1,5 @@
 import express, { Request, Response } from "express";
-import { getChat, getChats, sendMessage } from "../whatsapp_api";
+import { checkNumber, getChat, getChats, sendMessage } from "../whatsapp_api";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -15,6 +15,7 @@ if (!fs.existsSync(uploadDir)) {
 // Helper to normalize Brazilian phone numbers
 function normalizeBrazilianPhoneNumber(phoneNumber: string): string {
   // Check if it's a Brazilian number (+55) with 13 digits (including country code and 9th digit)
+  phoneNumber = phoneNumber.replace(/\D/g, "");
   const brazilianPhoneRegex = /^55(\d{2})9(\d{8})$/;
   const match = phoneNumber.match(brazilianPhoneRegex);
 
@@ -23,16 +24,6 @@ function normalizeBrazilianPhoneNumber(phoneNumber: string): string {
     return `55${match[1]}${match[2]}`;
   }
   return phoneNumber;
-}
-
-// Helper to normalize chatId suffix based on param or query
-function normalizeChatId(chatId: string, isGroupQuery?: string | undefined) {
-  // Normalize phone number before adding suffix
-  const normalizedId = chatId.includes("@")
-    ? chatId
-    : normalizeBrazilianPhoneNumber(chatId);
-
-  return normalizedId;
 }
 
 const router = express.Router();
@@ -133,6 +124,29 @@ const router = express.Router();
 //   }
 // });
 
+async function getWhatsAppId(rawId: string): Promise<string> {
+  let id = rawId.replace(/[^\d+]/g, "");
+
+  if (!id.startsWith("+")) {
+    id = `+${id}`;
+  }
+
+  if (id.startsWith("+55") && id.length === 14) {
+    const ddd = Number(id.slice(3, 5));
+    if (ddd >= 31) {
+      // remove nono dígito
+      id = id.slice(0, 5) + id.slice(6);
+    }
+  }
+  id = id.replace("+", "");
+
+  if (!id.endsWith("@g.us") && !id.endsWith("@s.whatsapp.net")) {
+    id = id.includes("-") ? `${id}@g.us` : `${id}@s.whatsapp.net`;
+  }
+
+  return id;
+}
+
 /**
  * @swagger
  * /api/message/chat/{chatId}:
@@ -188,10 +202,8 @@ router.post(
     if (!client) return res.status(404).send("Client not found");
     if (!client.get("ready")) return res.status(400).send("Client not ready");
 
-    const chatId = normalizeChatId(
-      req.params.chatId,
-      req.query.group as string | undefined
-    );
+    const chatId = await getWhatsAppId(req.params.chatId);
+    console.log("num:", chatId);
 
     const { message, response_to_id } = req.body;
 

@@ -11,6 +11,7 @@ import {
 } from "../types/MetaAPI";
 import { downloadMediaMessage, WAMessage } from "baileys";
 import logger from "../lib/logger";
+import { revWhatsAppId } from "./formatNumbers";
 
 function formatStatus(messageAck: any): WhatsAppStatus {
   const acks: {
@@ -59,25 +60,29 @@ async function downloadMedia(message: WAMessage) {
 }
 
 async function formatMessage(message: WAMessage): Promise<WhatsAppMessage> {
+  const from = revWhatsAppId(
+    (
+      message.message?.extendedTextMessage?.contextInfo?.participant ?? ""
+    ).split("@")[0]
+  );
   const quote = !!message.message?.extendedTextMessage?.contextInfo
     ? {
-        from: (
-          message.message?.extendedTextMessage?.contextInfo?.participant ?? ""
-        ).split("@")[0],
+        from: from,
         id: message.message?.extendedTextMessage?.contextInfo?.stanzaId ?? "",
       }
     : undefined;
   const isGroup = message.key.remoteJid?.includes("@g.us") ?? false;
   logger.debug("message", message);
   return {
-    from:
+    from: revWhatsAppId(
       message.key.addressingMode == "pn"
         ? message.key.remoteJid?.split("@")[0] ?? ""
         : !isGroup
         ? message.key.remoteJidAlt?.split("@")[0] ?? ""
         : message.key.participantAlt?.split("@")[0] ??
           message.key.participant?.split("@")[0] ??
-          "",
+          ""
+    ),
     id: message.key.id ?? "",
     timestamp: Math.floor(Number(message.messageTimestamp)).toString(),
     type: message.message?.audioMessage ? "audio64" : "text",

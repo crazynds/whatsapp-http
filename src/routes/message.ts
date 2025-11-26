@@ -5,25 +5,12 @@ import path from "path";
 import fs from "fs";
 import { findClient } from "../whatsapp_api/findClient";
 import log from "../lib/logger";
+import { getWhatsAppId } from "../whatsapp_api/formatNumbers";
 
 const uploadDir = path.join(process.cwd(), "data/uploads");
 const upload = multer({ dest: uploadDir });
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
-}
-
-// Helper to normalize Brazilian phone numbers
-function normalizeBrazilianPhoneNumber(phoneNumber: string): string {
-  // Check if it's a Brazilian number (+55) with 13 digits (including country code and 9th digit)
-  phoneNumber = phoneNumber.replace(/\D/g, "");
-  const brazilianPhoneRegex = /^55(\d{2})9(\d{8})$/;
-  const match = phoneNumber.match(brazilianPhoneRegex);
-
-  if (match) {
-    // Remove the 9th digit (the first digit after area code)
-    return `55${match[1]}${match[2]}`;
-  }
-  return phoneNumber;
 }
 
 const router = express.Router();
@@ -124,27 +111,6 @@ const router = express.Router();
 //   }
 // });
 
-async function getWhatsAppId(rawId: string): Promise<string> {
-  let suffix =
-    rawId.split("@").length > 1 ? `@${rawId.split("@")[1]}` : "@s.whatsapp.net";
-  let id = rawId.replace(/[^\d+]/g, "");
-
-  if (!id.startsWith("+")) {
-    id = `+${id}`;
-  }
-
-  if (id.startsWith("+55") && id.length === 14) {
-    const ddd = Number(id.slice(3, 5));
-    if (ddd >= 31) {
-      // remove nono dígito
-      id = id.slice(0, 5) + id.slice(6);
-    }
-  }
-  id = id.replace("+", "") + suffix;
-
-  return id;
-}
-
 /**
  * @swagger
  * /api/message/chat/{chatId}:
@@ -200,7 +166,7 @@ router.post(
     if (!client) return res.status(404).send("Client not found");
     if (!client.get("ready")) return res.status(400).send("Client not ready");
 
-    const chatId = await getWhatsAppId(req.params.chatId);
+    const chatId = getWhatsAppId(req.params.chatId);
     console.log("num:", chatId);
 
     const { message, response_to_id } = req.body;

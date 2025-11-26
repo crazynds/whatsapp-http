@@ -128,7 +128,8 @@ export async function findClient(clientId: any, can_create: boolean = false) {
                 message.status !== 0 &&
                 message.key.remoteJid &&
                 message.key.id &&
-                !message.key.fromMe
+                !message.key.fromMe &&
+                message.key.remoteJid != "status@broadcast"
               );
             })
             .filter((message) => {

@@ -33,5 +33,5 @@ export function revWhatsAppId(rawId: string) {
       id = id.slice(0, 5) + "9" + id.slice(5);
     }
   }
-  return id;
+  return id.replace("+", "");
 }

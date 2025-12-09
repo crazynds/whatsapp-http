@@ -1,20 +1,11 @@
 import { FindOrCreateOptions } from "@sequelize/core";
-import {
-  MessageAck,
-  MessageMedia,
-  MessageTypes,
-  type Message,
-} from "whatsapp-web.js";
 import ClientModel from "../models/client";
 import { clients, deleteClient } from ".";
 import QRCode from "qrcode";
 import { webhookHandler } from "./webhook";
 import log from "../lib/logger";
 import path from "path";
-import logger from "../lib/logger";
 import { WhatsappService } from "../services/WhatsappService";
-import { WAMessage } from "baileys";
-import { downloadMediaMessage } from "baileys";
 
 export async function findClient(clientId: any, can_create: boolean = false) {
   const opts: FindOrCreateOptions = {
@@ -30,7 +21,6 @@ export async function findClient(clientId: any, can_create: boolean = false) {
     async (resolve, reject) => {
       const sessionDir = path.join(process.cwd(), "data", "sessions");
       const waService = new WhatsappService(clientId.toString());
-
       const disconectEvent = async () => {
         log.warn("Client disconected: " + clientId);
         const wh = clientModel.get("webHook") as string | null;

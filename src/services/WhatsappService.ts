@@ -4,12 +4,15 @@ import makeWASocket, {
   useMultiFileAuthState,
   WASocket,
   BaileysEventMap,
+  AuthenticationState,
+  BufferJSON,
 } from "baileys";
 import { Boom } from "@hapi/boom";
 import * as path from "path";
 import logger from "../lib/logger";
 import { ILogger } from "baileys/lib/Utils/logger";
 import fs from "fs";
+import { useSQLiteAuthState } from "./sqlite-state";
 
 interface ChatInfo {
   id: string;
@@ -58,9 +61,38 @@ export class WhatsappService {
    * Inicializa a sessão do WhatsApp
    */
   public async connect(sessionDir: string): Promise<void> {
-    const { state, saveCreds } = await useMultiFileAuthState(
-      path.join(sessionDir, `${this.sessionId}`)
-    );
+    const oldSessionDir = path.join(sessionDir, `${this.sessionId}`);
+    const oldState = await useMultiFileAuthState(oldSessionDir);
+    const old = false;
+    var state: AuthenticationState,
+      saveCreds: (newCreds: any) => Promise<void>,
+      removeCreds: () => Promise<void>;
+    if (old) {
+      state = oldState.state;
+      saveCreds = oldState.saveCreds;
+    } else {
+      var dbState = await await useSQLiteAuthState({
+        filename: "data/session.db",
+        sessionId: this.sessionId,
+      });
+      state = dbState.state;
+      saveCreds = dbState.saveCreds;
+      removeCreds = dbState.removeCreds;
+      if (oldState.state.creds.me?.id) {
+        await dbState.setCreds(oldState.state.creds);
+        dbState = await await useSQLiteAuthState({
+          filename: "data/session.db",
+          sessionId: this.sessionId,
+        });
+        state = dbState.state;
+        saveCreds = dbState.saveCreds;
+        removeCreds = dbState.removeCreds;
+
+        if (fs.existsSync(oldSessionDir)) {
+          fs.rmSync(oldSessionDir, { recursive: true });
+        }
+      }
+    }
     this.sessionDir = path.join(sessionDir, `${this.sessionId}`);
 
     const waVersion = await fetchLatestWaConnectVersion();
@@ -140,7 +172,9 @@ export class WhatsappService {
         if (shouldReconnect) this.connect(sessionDir);
         else if ("close" in this.callbacks) {
           logger.error("Disconected, reason: ", lastDisconnect?.error);
+          if (removeCreds) removeCreds().then(() => {});
           this.status = "closed";
+
           this.callbacks["close"]();
         }
       } else if (connection === "open") {
@@ -243,7 +277,6 @@ export class WhatsappService {
   public async checkNumber(number: string) {
     if (!this.sock) throw new Error("Socket não inicializado");
     const resp = await this.sock.onWhatsApp(number);
-    console.log(resp);
     if (!resp || resp?.length <= 0 || !resp[0]) return false;
     return resp[0].exists;
   }

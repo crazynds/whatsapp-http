@@ -167,7 +167,6 @@ router.post(
     if (!client.get("ready")) return res.status(400).send("Client not ready");
 
     const chatId = getWhatsAppId(req.params.chatId);
-    console.log("num:", chatId);
 
     const { message, response_to_id } = req.body;
 

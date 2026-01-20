@@ -126,11 +126,11 @@ export async function findClient(clientId: any, can_create: boolean = false) {
               return (
                 message.message?.audioMessage ||
                 (message.message?.extendedTextMessage
-                  ? message.message.extendedTextMessage.text ?? ""
-                  : message.message?.conversation ?? "")
+                  ? (message.message.extendedTextMessage.text ?? "")
+                  : (message.message?.conversation ?? ""))
               );
             }),
-          []
+          [],
         );
       });
       waService.connect(sessionDir);
@@ -170,7 +170,7 @@ export async function findClient(clientId: any, can_create: boolean = false) {
 
       clients[clientId] = waService;
       return waService;
-    }
+    },
   ).catch((err) => {
     log.error(err);
   });

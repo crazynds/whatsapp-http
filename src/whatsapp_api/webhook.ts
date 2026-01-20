@@ -63,7 +63,7 @@ async function formatMessage(message: WAMessage): Promise<WhatsAppMessage> {
   const from = revWhatsAppId(
     (
       message.message?.extendedTextMessage?.contextInfo?.participant ?? ""
-    ).split("@")[0]
+    ).split("@")[0],
   );
   const quote = !!message.message?.extendedTextMessage?.contextInfo
     ? {
@@ -76,12 +76,14 @@ async function formatMessage(message: WAMessage): Promise<WhatsAppMessage> {
   return {
     from: revWhatsAppId(
       message.key.addressingMode == "pn"
-        ? message.key.remoteJid?.split("@")[0] ?? ""
+        ? (message.key.remoteJid?.split("@")[0] ?? "")
         : !isGroup
-        ? message.key.remoteJidAlt?.split("@")[0] ?? message.key.remoteJid?.split("@")[0] ?? ""
-        : message.key.participantAlt?.split("@")[0] ??
-          message.key.participant?.split("@")[0] ??
-          ""
+          ? (message.key.remoteJidAlt?.split("@")[0] ??
+            message.key.remoteJid?.split("@")[0] ??
+            "")
+          : (message.key.participantAlt?.split("@")[0] ??
+            message.key.participant?.split("@")[0] ??
+            ""),
     ),
     id: message.key.id ?? "",
     timestamp: Math.floor(Number(message.messageTimestamp)).toString(),
@@ -92,14 +94,14 @@ async function formatMessage(message: WAMessage): Promise<WhatsAppMessage> {
         }
       : {
           body: message.message?.extendedTextMessage
-            ? message.message.extendedTextMessage.text ?? ""
-            : message.message?.conversation ?? "",
+            ? (message.message.extendedTextMessage.text ?? "")
+            : (message.message?.conversation ?? ""),
         },
     context:
       isGroup || quote
         ? {
             ...(quote ?? {}),
-            group_id: isGroup ? message.key.remoteJid ?? "" : undefined,
+            group_id: isGroup ? (message.key.remoteJid ?? "") : undefined,
           }
         : undefined,
     fullBody: JSON.stringify(message),
@@ -108,7 +110,7 @@ async function formatMessage(message: WAMessage): Promise<WhatsAppMessage> {
 
 async function buildMessageChange(
   client: Model<any, any>,
-  messages: WAMessage[]
+  messages: WAMessage[],
 ): Promise<WhatsAppChange> {
   const contacts = messages.map((message) => ({
     profile: {
@@ -135,7 +137,7 @@ async function buildMessageChange(
 }
 async function buildStatusChange(
   client: Model<any, any>,
-  messageAcks: WAMessage[]
+  messageAcks: WAMessage[],
 ): Promise<WhatsAppChange> {
   return {
     value: {
@@ -153,7 +155,7 @@ async function buildStatusChange(
 export async function webhookHandler(
   client: Model<any, any>,
   messages: WAMessage[],
-  messageAcks: WAMessage[]
+  messageAcks: WAMessage[],
 ) {
   if (messages.length == 0 && messageAcks.length == 0) return true;
   await client.reload();
@@ -173,7 +175,7 @@ export async function webhookHandler(
     }
     if (messageAcks.length > 0) {
       payload.entry[0].changes.push(
-        await buildStatusChange(client, messageAcks)
+        await buildStatusChange(client, messageAcks),
       );
     }
     log.debug("Payload webhook: ", {

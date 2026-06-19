@@ -171,11 +171,13 @@ router.post(
     const { message, response_to_id } = req.body;
 
     let finalMediaPath: string | null = null;
+    let mimetype: string | null = null;
 
     try {
       let isVoice: boolean = false;
       if (req.file) {
         isVoice = req.query.voice === "true";
+        mimetype = req.file.mimetype ?? null;
 
         // Ensure ./media exists
         const mediaDir = path.join(process.cwd(), "media");
@@ -196,6 +198,7 @@ router.post(
         chatId,
         message ?? null,
         finalMediaPath,
+        mimetype,
         response_to_id ?? null,
         isVoice
       )

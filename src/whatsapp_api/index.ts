@@ -43,36 +43,15 @@ export async function sendMessage(
   chatId: string,
   message: string | null = null,
   mediaPath: string | null = null,
+  mimetype: string | null = null,
   responseToId: string | null = null,
   isAudio: boolean = false
 ) {
   const clientId = model.get("clientId") as string | null;
   const client = clients[clientId ?? ""];
   if (!client) throw "Client not found";
-  if (!message) return;
-  await client.sendMessage(chatId, message);
-  // const chat = await client.getChatById(chatId);
-  // const options: any = {};
-  // if (responseToId) {
-  //   options.quotedMessageId = responseToId;
-  // }
-  // await chat.sendSeen();
-  // await chat.sendStateTyping();
-  // await new Promise((resolve) =>
-  //   setTimeout(resolve, Math.log2((message?.length ?? 0) + 10) * 1000)
-  // );
-  // if (mediaPath) {
-  //   logger.info(`Sending media: ${mediaPath}`);
-  //   const media = MessageMedia.fromFilePath(mediaPath);
-  //   if (message) options.caption = message;
-  //   options.sendAudioAsVoice = isAudio;
-  //   return await JsonMsg(await chat.sendMessage(media, options));
-  // }
-  // if (message) {
-  //   logger.info(`Sending text: ${message}`);
-  //   return await JsonMsg(await chat.sendMessage(message, options));
-  // }
-  // throw new Error("Nothing to send: no media or message");
+  if (!message && !mediaPath) return;
+  await client.sendMessage(chatId, message, mediaPath, mimetype, isAudio);
 }
 
 export async function getMessage(

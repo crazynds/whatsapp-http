@@ -6,6 +6,7 @@ import makeWASocket, {
   BaileysEventMap,
   AuthenticationState,
   BufferJSON,
+  AnyMessageContent,
 } from "baileys";
 import { Boom } from "@hapi/boom";
 import * as path from "path";
@@ -249,17 +250,58 @@ export class WhatsappService {
   /**
    * Envia uma mensagem para um número
    */
-  public async sendMessage(to: string, message: string) {
+  public async sendMessage(
+    to: string,
+    message: string | null = null,
+    mediaPath: string | null = null,
+    mimetype: string | null = null,
+    isVoice: boolean = false,
+  ) {
     if (!this.sock) throw new Error("Socket não inicializado");
+    if (!message && !mediaPath)
+      throw new Error("Nada para enviar: sem texto nem mídia");
     const jid = to.includes("@") ? to : `${to}@s.whatsapp.net`;
     this.sock.sendPresenceUpdate("available");
-    this.sock.sendPresenceUpdate("composing", jid);
+    this.sock.sendPresenceUpdate(mediaPath && isVoice ? "recording" : "composing", jid);
     await new Promise((resolve) =>
       setTimeout(resolve, Math.log2((message?.length ?? 0) + 10) * 700),
     );
     this.sock.sendPresenceUpdate("available", jid);
-    await this.sock.sendMessage(jid, { text: message });
+
+    const content = this.buildMessageContent(message, mediaPath, mimetype, isVoice);
+    await this.sock.sendMessage(jid, content);
     this.sock.sendPresenceUpdate("unavailable");
+  }
+
+  /**
+   * Monta o conteúdo da mensagem do Baileys de acordo com o tipo de mídia.
+   */
+  private buildMessageContent(
+    message: string | null,
+    mediaPath: string | null,
+    mimetype: string | null,
+    isVoice: boolean,
+  ): AnyMessageContent {
+    if (!mediaPath) {
+      return { text: message ?? "" };
+    }
+    const mime = mimetype ?? "application/octet-stream";
+    const caption = message ?? undefined;
+    if (mime.startsWith("image/")) {
+      return { image: { url: mediaPath }, mimetype: mime, caption };
+    }
+    if (mime.startsWith("video/")) {
+      return { video: { url: mediaPath }, mimetype: mime, caption };
+    }
+    if (mime.startsWith("audio/")) {
+      return { audio: { url: mediaPath }, mimetype: mime, ptt: isVoice };
+    }
+    return {
+      document: { url: mediaPath },
+      mimetype: mime,
+      fileName: path.basename(mediaPath),
+      caption,
+    };
   }
 
   // /**

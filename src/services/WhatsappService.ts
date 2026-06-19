@@ -50,8 +50,8 @@ export class WhatsappService {
   private sock: WASocket | null = null;
   private sessionId: string;
   private callbacks: { [key: string]: CallableFunction } = {};
-  private sessionDir: string = "";
   private status = "off";
+  private removeCreds: (() => Promise<void>) | null = null;
 
   constructor(sessionId: string) {
     this.sessionId = sessionId;
@@ -66,7 +66,7 @@ export class WhatsappService {
     const old = false;
     var state: AuthenticationState,
       saveCreds: (newCreds: any) => Promise<void>,
-      removeCreds: () => Promise<void>;
+      removeCreds: (() => Promise<void>) | undefined;
     if (old) {
       state = oldState.state;
       saveCreds = oldState.saveCreds;
@@ -93,7 +93,7 @@ export class WhatsappService {
         }
       }
     }
-    this.sessionDir = path.join(sessionDir, `${this.sessionId}`);
+    this.removeCreds = removeCreds ?? null;
 
     const waVersion = await fetchLatestWaConnectVersion();
     const { version: baileysVersion } = await fetchLatestBaileysVersion();
@@ -143,7 +143,6 @@ export class WhatsappService {
     this.sock = makeWASocket({
       version,
       auth: state,
-      printQRInTerminal: false, // Mostra QR no terminal
       syncFullHistory: false,
       markOnlineOnConnect: false,
       logger: customLogger,
@@ -160,15 +159,19 @@ export class WhatsappService {
         if ("qrCode" in this.callbacks) this.callbacks["qrCode"](qr);
       }
       if (connection === "close") {
-        const shouldReconnect = [
-          DisconnectReason.connectionLost,
-          DisconnectReason.connectionReplaced,
-          DisconnectReason.connectionClosed,
-          DisconnectReason.restartRequired,
-          DisconnectReason.timedOut,
-          DisconnectReason.unavailableService,
-          DisconnectReason.badSession,
-        ].includes((lastDisconnect?.error as Boom)?.output?.statusCode);
+        const shouldReconnect =
+          [
+            DisconnectReason.connectionLost,
+            DisconnectReason.connectionReplaced,
+            DisconnectReason.connectionClosed,
+            DisconnectReason.restartRequired,
+            DisconnectReason.timedOut,
+            DisconnectReason.unavailableService,
+            DisconnectReason.badSession,
+          ].includes((lastDisconnect?.error as Boom)?.output?.statusCode) ||
+          (lastDisconnect?.error as Boom)?.output.payload.message ==
+            "Stream Errored (conflict)";
+
         if (shouldReconnect) this.connect(sessionDir);
         else if ("close" in this.callbacks) {
           logger.error("Disconected, reason: ", lastDisconnect?.error);
@@ -205,7 +208,7 @@ export class WhatsappService {
         syncType,
       }) => {
         //console.log(newChats, newContacts, newMessages, syncType);
-      }
+      },
     );
     this.sock.ev.on("creds.update", (creds) => {
       if ("credentials" in this.callbacks) this.callbacks["credentials"](creds);
@@ -233,12 +236,12 @@ export class WhatsappService {
     this.callbacks["update"] = callback;
   }
   public onCredentials(
-    callback: (arg: BaileysEventMap["creds.update"]) => void
+    callback: (arg: BaileysEventMap["creds.update"]) => void,
   ) {
     this.callbacks["credentials"] = callback;
   }
   public onMessage(
-    callback: (arg: BaileysEventMap["messages.upsert"]) => void
+    callback: (arg: BaileysEventMap["messages.upsert"]) => void,
   ) {
     this.callbacks["message"] = callback;
   }
@@ -252,7 +255,7 @@ export class WhatsappService {
     this.sock.sendPresenceUpdate("available");
     this.sock.sendPresenceUpdate("composing", jid);
     await new Promise((resolve) =>
-      setTimeout(resolve, Math.log2((message?.length ?? 0) + 10) * 700)
+      setTimeout(resolve, Math.log2((message?.length ?? 0) + 10) * 700),
     );
     this.sock.sendPresenceUpdate("available", jid);
     await this.sock.sendMessage(jid, { text: message });
@@ -295,8 +298,8 @@ export class WhatsappService {
     try {
       await this.logout();
     } catch (e) {}
-    // delete session dir folder
-    await fs.rm(this.sessionDir, { recursive: true }, () => {});
+    // Remove session credentials from SQLite
+    if (this.removeCreds) await this.removeCreds();
   }
 
   public getStatus() {

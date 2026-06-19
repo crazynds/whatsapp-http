@@ -1,10 +1,7 @@
-import { Client, MessageMedia } from "whatsapp-web.js";
-
 import ClientModel from "../models/client";
 import { Model } from "@sequelize/core";
 import fs from "fs/promises";
 import path from "path";
-import { JsonChat, JsonContact, JsonMsg } from "./resources";
 import logger from "../lib/logger";
 import { WhatsappService } from "../services/WhatsappService";
 import { cli } from "winston/lib/winston/config";

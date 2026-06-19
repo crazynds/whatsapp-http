@@ -67,7 +67,7 @@ export async function useSQLiteAuthState(
             if (value) {
               if (type === "app-state-sync-key") {
                 value =
-                  baileys.proto.Message.AppStateSyncKeyData.fromObject(value);
+                  baileys.proto.Message.AppStateSyncKeyData.create(value);
               }
               data[id] = value;
             }

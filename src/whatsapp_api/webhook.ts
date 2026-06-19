@@ -1,4 +1,3 @@
-import { Chat, Message, MessageAck, MessageTypes } from "whatsapp-web.js";
 import log from "../lib/logger";
 import { Model } from "@sequelize/core";
 import {

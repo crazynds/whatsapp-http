@@ -102,6 +102,7 @@ async function formatMessage(
     id: message.key.id ?? "",
     timestamp: Math.floor(Number(message.messageTimestamp)).toString(),
     type: message.message?.audioMessage ? "audio64" : "text",
+    from_me: message.key.fromMe ?? false,
     text: !!message.message?.audioMessage
       ? {
           audio: await downloadMedia(message),

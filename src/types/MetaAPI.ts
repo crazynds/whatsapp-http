@@ -60,6 +60,12 @@ export interface WhatsAppMessage {
   id: string; // ID único da mensagem (wamid)
   timestamp: string;
   type: WhatsAppMessageType;
+  // true quando quem enviou foi o próprio dono do número (celular ou WhatsApp
+  // Web ligado ao dispositivo), respondendo fora do sistema — não confundir
+  // com uma mensagem enviada pela nossa própria API, que também ecoa aqui
+  // marcada como fromMe. O backend distingue as duas checando se o ID já foi
+  // registrado como enviado por ele mesmo.
+  from_me?: boolean;
 
   // 🔹 Contexto (respostas, reações)
   context?: {

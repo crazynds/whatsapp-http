@@ -6,7 +6,7 @@ const storagePath = process.env.DB_PATH || "./data/db.sqlite" || ":memory:";
 const sequelize = new Sequelize({
   dialect: SqliteDialect,
   storage: storagePath,
-  pool: { max: 1, idle: Infinity, maxUses: Infinity },
+  pool: { max: 2, idle: Infinity, maxUses: Infinity },
 });
 
 export default sequelize;

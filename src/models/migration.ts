@@ -2,6 +2,7 @@ import log from "../lib/logger";
 import sequelize from "../lib/sequelize";
 import "./client";
 import "./lidMapping";
+import "./pendingWebhook";
 
 export default async function () {
   //await Client.sync({alter:true});

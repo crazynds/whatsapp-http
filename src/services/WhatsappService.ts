@@ -21,12 +21,30 @@ import {
   queueLidMappingImport,
 } from "./lidMappingService";
 import { isLidUser } from "baileys";
+import ClientModel from "../models/client";
+import { getOrCreateFingerprint } from "./browserFingerprint";
 
 interface ChatInfo {
   id: string;
   name: string;
   isGroup: boolean;
 }
+
+// Cacheia a versão resolvida em memória: buscar de novo a cada reconexão
+// só adiciona latência e mais um ponto de falha externo bem na hora em
+// que já se está tentando se recuperar de uma queda de conexão. Não é
+// randomizada por client: precisa ser uma versão de protocolo realmente
+// suportada pelos servidores do WhatsApp, então "variar" aqui vem de forma
+// natural apenas pelo momento em que cada client se conectou pela primeira vez.
+let cachedVersion: any | null = null;
+
+const resolveWaVersion = async (): Promise<any> => {
+  if (cachedVersion) return cachedVersion;
+  const waVersion = await fetchLatestWaConnectVersion();
+  const { version: baileysVersion } = await fetchLatestBaileysVersion();
+  cachedVersion = waVersion ? waVersion.version : baileysVersion;
+  return cachedVersion;
+};
 
 const fetchLatestWaConnectVersion = async (options = {}) => {
   try {
@@ -60,15 +78,54 @@ export class WhatsappService {
   private callbacks: { [key: string]: CallableFunction } = {};
   private status = "off";
   private removeCreds: (() => Promise<void>) | null = null;
+  private reconnectAttempts = 0;
 
   constructor(sessionId: string) {
     this.sessionId = sessionId;
   }
 
   /**
+   * Encerra o socket anterior (sem deslogar/apagar credenciais) antes de
+   * abrir um novo, para não deixar listeners e a conexão WS antiga
+   * penduradas em memória.
+   */
+  private teardownSocket() {
+    if (!this.sock) return;
+    try {
+      const events: (keyof BaileysEventMap)[] = [
+        "creds.update",
+        "connection.update",
+        "messages.upsert",
+        "messaging-history.set",
+        "messages.update",
+        "lid-mapping.update",
+      ];
+      for (const event of events) this.sock.ev.removeAllListeners(event);
+      this.sock.end(new Error("reconnecting"));
+    } catch (e) {}
+    this.sock = null;
+  }
+
+  /**
+   * Reconecta com backoff exponencial (1s, 2s, 4s... até 30s) para não
+   * entrar em loop apertado de reconexões quando a rede está instável.
+   */
+  private scheduleReconnect(sessionDir: string) {
+    this.reconnectAttempts += 1;
+    const delayMs = Math.min(30_000, 1000 * 2 ** (this.reconnectAttempts - 1));
+    logger.warn(
+      `${this.sessionId} - reconectando em ${delayMs}ms (tentativa ${this.reconnectAttempts})`,
+    );
+    setTimeout(() => {
+      this.connect(sessionDir);
+    }, delayMs);
+  }
+
+  /**
    * Inicializa a sessão do WhatsApp
    */
   public async connect(sessionDir: string): Promise<void> {
+    this.teardownSocket();
     const oldSessionDir = path.join(sessionDir, `${this.sessionId}`);
     const oldState = await useMultiFileAuthState(oldSessionDir);
     const old = false;
@@ -108,15 +165,11 @@ export class WhatsappService {
       queueLidMappingImport(dbState.db, this.sessionId);
     }
 
-    const waVersion = await fetchLatestWaConnectVersion();
-    const { version: baileysVersion } = await fetchLatestBaileysVersion();
-
-    var version: any;
-    if (!waVersion) {
-      version = baileysVersion;
-    } else {
-      version = waVersion.version;
-    }
+    const [clientModel] = await ClientModel.findOrCreate({
+      where: { clientId: this.sessionId },
+    });
+    const browser = await getOrCreateFingerprint(clientModel);
+    const version = await resolveWaVersion();
     const sessionId = this.sessionId;
     const customLogger = {
       level: logger.level,
@@ -156,6 +209,7 @@ export class WhatsappService {
     this.sock = makeWASocket({
       version,
       auth: state,
+      browser,
       syncFullHistory: false,
       markOnlineOnConnect: false,
       logger: customLogger,
@@ -172,20 +226,16 @@ export class WhatsappService {
         if ("qrCode" in this.callbacks) this.callbacks["qrCode"](qr);
       }
       if (connection === "close") {
-        const shouldReconnect =
-          [
-            DisconnectReason.connectionLost,
-            DisconnectReason.connectionReplaced,
-            DisconnectReason.connectionClosed,
-            DisconnectReason.restartRequired,
-            DisconnectReason.timedOut,
-            DisconnectReason.unavailableService,
-            DisconnectReason.badSession,
-          ].includes((lastDisconnect?.error as Boom)?.output?.statusCode) ||
-          (lastDisconnect?.error as Boom)?.output.payload.message ==
-            "Stream Errored (conflict)";
+        const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
+        // Only logout (session revoked pelo usuário) e badSession (auth
+        // corrompida) são permanentes; qualquer outro motivo (rede, timeout,
+        // restart, status desconhecido/não-Boom, etc.) deve reconectar, senão
+        // blips transitórios acabam apagando a sessão como se fosse logout.
+        const isPermanent =
+          statusCode === DisconnectReason.loggedOut ||
+          statusCode === DisconnectReason.badSession;
 
-        if (shouldReconnect) this.connect(sessionDir);
+        if (!isPermanent) this.scheduleReconnect(sessionDir);
         else if ("close" in this.callbacks) {
           logger.error("Disconected, reason: ", lastDisconnect?.error);
           if (removeCreds) removeCreds().then(() => {});
@@ -194,6 +244,7 @@ export class WhatsappService {
           this.callbacks["close"]();
         }
       } else if (connection === "open") {
+        this.reconnectAttempts = 0;
         this.status = "opened";
         if ("open" in this.callbacks) this.callbacks["open"]();
       }

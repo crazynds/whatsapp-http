@@ -17,6 +17,7 @@ import {
   storeLidMapping,
   jidToPhoneDigits,
 } from "../services/lidMappingService";
+import { deliverWebhook } from "../services/webhookDeliveryService";
 
 function formatStatus(messageAck: any): WhatsAppStatus {
   const acks: {
@@ -229,11 +230,7 @@ export async function webhookHandler(
       url: webhookUrl,
     });
     if (webhookUrl) {
-      await fetch(webhookUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      await deliverWebhook(client.get("clientId") as string, webhookUrl, payload);
     }
   } catch (error) {
     log.warn("Failed to notify webhook of message:", error);
@@ -280,11 +277,7 @@ export async function handleLidMappingUpdate(
   };
   try {
     log.debug("Payload webhook (lid_resolved): ", { entry: payload.entry[0].changes, url: webhookUrl });
-    await fetch(webhookUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+    await deliverWebhook(client.get("clientId") as string, webhookUrl, payload);
   } catch (error) {
     log.warn("Failed to notify webhook of lid_resolved:", error);
   }

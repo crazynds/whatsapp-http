@@ -6,6 +6,7 @@ import { webhookHandler, handleLidMappingUpdate } from "./webhook";
 import log from "../lib/logger";
 import path from "path";
 import { WhatsappService } from "../services/WhatsappService";
+import { deliverWebhook } from "../services/webhookDeliveryService";
 
 export async function findClient(clientId: any, can_create: boolean = false) {
   const opts: FindOrCreateOptions = {
@@ -31,29 +32,25 @@ export async function findClient(clientId: any, can_create: boolean = false) {
         clientModel.save();
         if (wh) {
           try {
-            await fetch(wh, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                object: "whatsapp_web_account",
-                entry: [
-                  {
-                    id: clientModel.get("clientId"),
-                    changes: [
-                      {
-                        value: {
-                          messaging_product: "whatsapp",
-                          metadata: {
-                            display_phone_number: clientModel.get("name"),
-                            phone_number_id: clientModel.get("clientId"),
-                          },
+            await deliverWebhook(clientModel.get("clientId") as string, wh, {
+              object: "whatsapp_web_account",
+              entry: [
+                {
+                  id: clientModel.get("clientId"),
+                  changes: [
+                    {
+                      value: {
+                        messaging_product: "whatsapp",
+                        metadata: {
+                          display_phone_number: clientModel.get("name"),
+                          phone_number_id: clientModel.get("clientId"),
                         },
-                        field: "whatsapp_web_disconected",
                       },
-                    ],
-                  },
-                ],
-              }),
+                      field: "whatsapp_web_disconected",
+                    },
+                  ],
+                },
+              ],
             });
           } catch (ex) {}
         }

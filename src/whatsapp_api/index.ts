@@ -45,13 +45,21 @@ export async function sendMessage(
   mediaPath: string | null = null,
   mimetype: string | null = null,
   responseToId: string | null = null,
-  isAudio: boolean = false
+  isAudio: boolean = false,
+  simulateTyping: boolean = false
 ) {
   const clientId = model.get("clientId") as string | null;
   const client = clients[clientId ?? ""];
   if (!client) throw "Client not found";
   if (!message && !mediaPath) return;
-  await client.sendMessage(chatId, message, mediaPath, mimetype, isAudio);
+  await client.sendMessage(
+    chatId,
+    message,
+    mediaPath,
+    mimetype,
+    isAudio,
+    simulateTyping
+  );
 }
 
 export async function setTyping(

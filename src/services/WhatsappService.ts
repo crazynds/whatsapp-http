@@ -348,6 +348,7 @@ export class WhatsappService {
     mediaPath: string | null = null,
     mimetype: string | null = null,
     isVoice: boolean = false,
+    simulateTyping: boolean = false,
   ) {
     if (!this.sock) throw new Error("Socket não inicializado");
     if (!message && !mediaPath)
@@ -356,16 +357,19 @@ export class WhatsappService {
     // A mensagem assume o controle da presença: sem isto a renovação do
     // "digitando..." ainda ligada reacenderia o indicador depois do envio.
     this.clearTypingTimer(jid);
-    this.sock.sendPresenceUpdate("available");
-    this.sock.sendPresenceUpdate(mediaPath && isVoice ? "recording" : "composing", jid);
-    await new Promise((resolve) =>
-      setTimeout(resolve, Math.log2((message?.length ?? 0) + 10) * 700),
-    );
-    this.sock.sendPresenceUpdate("available", jid);
+
+    if (simulateTyping) {
+      this.sock.sendPresenceUpdate("available");
+      this.sock.sendPresenceUpdate(mediaPath && isVoice ? "recording" : "composing", jid);
+      await new Promise((resolve) =>
+        setTimeout(resolve, Math.log2((message?.length ?? 0) + 10) * 700),
+      );
+      this.sock.sendPresenceUpdate("available", jid);
+    }
 
     const content = this.buildMessageContent(message, mediaPath, mimetype, isVoice);
     await this.sock.sendMessage(jid, content);
-    this.sock.sendPresenceUpdate("unavailable");
+    if (simulateTyping) this.sock.sendPresenceUpdate("unavailable");
   }
 
   /**

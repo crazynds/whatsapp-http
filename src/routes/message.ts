@@ -156,6 +156,12 @@ const router = express.Router();
  *               response_to_id:
  *                 type: string
  *                 description: ID of the message to reply to (optional)
+ *               simulate_typing:
+ *                 type: boolean
+ *                 description: |
+ *                   If true, shows "typing..." (or "recording audio..." for voice
+ *                   messages) and waits a delay proportional to the text length
+ *                   before sending. Can also be passed as a query parameter.
  *     responses:
  *       200:
  *         description: Message sent successfully
@@ -175,6 +181,10 @@ router.post(
     const chatId = getWhatsAppId(req.params.chatId);
 
     const { message, response_to_id } = req.body;
+    const simulateTyping =
+      req.query.simulate_typing === "true" ||
+      req.body?.simulate_typing === "true" ||
+      req.body?.simulate_typing === true;
 
     let finalMediaPath: string | null = null;
     let mimetype: string | null = null;
@@ -206,7 +216,8 @@ router.post(
         finalMediaPath,
         mimetype,
         response_to_id ?? null,
-        isVoice
+        isVoice,
+        simulateTyping
       )
         .catch((err) => {
           log.error(`Failed to send message: ${err}`);

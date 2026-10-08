@@ -79,6 +79,16 @@ export class WhatsappService {
   private status = "off";
   private removeCreds: (() => Promise<void>) | null = null;
   private reconnectAttempts = 0;
+  /** Renovação do "digitando..." por conversa, enquanto o backend gera a resposta. */
+  private typingTimers = new Map<string, NodeJS.Timeout>();
+
+  /**
+   * O WhatsApp apaga o "digitando..." do destinatário depois de alguns
+   * segundos sem novo sinal, então ele é renovado nesse intervalo.
+   */
+  private static readonly TYPING_REFRESH_MS = 8_000;
+  /** Teto de segurança: se o backend nunca mandar parar, o indicador some sozinho. */
+  private static readonly TYPING_MAX_MS = 120_000;
 
   constructor(sessionId: string) {
     this.sessionId = sessionId;
@@ -90,6 +100,7 @@ export class WhatsappService {
    * penduradas em memória.
    */
   private teardownSocket() {
+    this.clearAllTypingTimers();
     if (!this.sock) return;
     try {
       const events: (keyof BaileysEventMap)[] = [
@@ -342,6 +353,9 @@ export class WhatsappService {
     if (!message && !mediaPath)
       throw new Error("Nada para enviar: sem texto nem mídia");
     const jid = to.includes("@") ? to : `${to}@s.whatsapp.net`;
+    // A mensagem assume o controle da presença: sem isto a renovação do
+    // "digitando..." ainda ligada reacenderia o indicador depois do envio.
+    this.clearTypingTimer(jid);
     this.sock.sendPresenceUpdate("available");
     this.sock.sendPresenceUpdate(mediaPath && isVoice ? "recording" : "composing", jid);
     await new Promise((resolve) =>
@@ -352,6 +366,53 @@ export class WhatsappService {
     const content = this.buildMessageContent(message, mediaPath, mimetype, isVoice);
     await this.sock.sendMessage(jid, content);
     this.sock.sendPresenceUpdate("unavailable");
+  }
+
+  /**
+   * Liga ou desliga o "digitando..." para um contato.
+   *
+   * Ligado, o indicador é renovado a cada `TYPING_REFRESH_MS` até receber o
+   * pedido para parar, enviar uma mensagem para o mesmo contato ou chegar em
+   * `TYPING_MAX_MS`. Quem chama só precisa avisar o início e o fim.
+   */
+  public async setTyping(to: string, typing: boolean) {
+    if (!this.sock) throw new Error("Socket não inicializado");
+    const jid = to.includes("@") ? to : `${to}@s.whatsapp.net`;
+    this.clearTypingTimer(jid);
+
+    if (!typing) {
+      await this.sock.sendPresenceUpdate("paused", jid);
+      return;
+    }
+
+    await this.sock.sendPresenceUpdate("available");
+    await this.sock.sendPresenceUpdate("composing", jid);
+
+    const startedAt = Date.now();
+    const timer = setInterval(() => {
+      if (
+        !this.sock ||
+        Date.now() - startedAt >= WhatsappService.TYPING_MAX_MS
+      ) {
+        this.clearTypingTimer(jid);
+        this.sock?.sendPresenceUpdate("paused", jid).catch(() => {});
+        return;
+      }
+      this.sock.sendPresenceUpdate("composing", jid).catch(() => {});
+    }, WhatsappService.TYPING_REFRESH_MS);
+    this.typingTimers.set(jid, timer);
+  }
+
+  private clearTypingTimer(jid: string) {
+    const timer = this.typingTimers.get(jid);
+    if (!timer) return;
+    clearInterval(timer);
+    this.typingTimers.delete(jid);
+  }
+
+  private clearAllTypingTimers() {
+    for (const timer of this.typingTimers.values()) clearInterval(timer);
+    this.typingTimers.clear();
   }
 
   /**

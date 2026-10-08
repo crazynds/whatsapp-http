@@ -1,5 +1,11 @@
 import express, { Request, Response } from "express";
-import { checkNumber, getChat, getChats, sendMessage } from "../whatsapp_api";
+import {
+  checkNumber,
+  getChat,
+  getChats,
+  sendMessage,
+  setTyping,
+} from "../whatsapp_api";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -222,5 +228,61 @@ router.post(
     }
   }
 );
+
+/**
+ * @swagger
+ * /api/message/chat/{chatId}/typing:
+ *   post:
+ *     tags: [Messages]
+ *     summary: Turn the "typing..." indicator on or off for a chat
+ *     description: |
+ *       While on, the indicator is refreshed automatically until it is turned
+ *       off, a message is sent to the same chat, or a safety limit is reached.
+ *     parameters:
+ *       - in: query
+ *         name: clientId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The client ID
+ *       - in: path
+ *         name: chatId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The chat ID (send with @g.us suffix for a group chat)
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               typing:
+ *                 type: boolean
+ *                 description: true to show "typing...", false to clear it
+ *     responses:
+ *       200:
+ *         description: Presence updated
+ *       400:
+ *         description: Client not ready
+ *       404:
+ *         description: Client not found
+ */
+router.post("/chat/:chatId/typing", async (req: Request, res: Response) => {
+  const client = await findClient(req.query.clientId);
+  if (!client) return res.status(404).send("Client not found");
+  if (!client.get("ready")) return res.status(400).send("Client not ready");
+
+  const chatId = getWhatsAppId(req.params.chatId);
+  const typing = req.body?.typing !== false;
+
+  try {
+    await setTyping(client, chatId, typing);
+    res.status(200).send("OK");
+  } catch (err) {
+    res.status(500).json({ error: `error updating typing state: ${err}` });
+  }
+});
 
 export default router;

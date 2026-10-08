@@ -54,6 +54,17 @@ export async function sendMessage(
   await client.sendMessage(chatId, message, mediaPath, mimetype, isAudio);
 }
 
+export async function setTyping(
+  model: Model<any, any>,
+  chatId: string,
+  typing: boolean
+) {
+  const clientId = model.get("clientId") as string | null;
+  const client = clients[clientId ?? ""];
+  if (!client) throw "Client not found";
+  await client.setTyping(chatId, typing);
+}
+
 export async function getMessage(
   model: Model<any, any>,
   messageId: string

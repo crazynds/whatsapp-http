@@ -21,16 +21,30 @@ export interface SQLiteAuthStateOptions extends Options {
   filename: string;
 }
 
+// Um único handle por arquivo para o processo inteiro: abrir um Database novo
+// a cada connect/reconexão vazava handles (cada um com seu cache de páginas)
+// e esgotava a memória do servidor.
+const databases = new Map<string, DB>();
+
+function getDatabase(filename: string, databaseConfig: Options): DB {
+  let db = databases.get(filename);
+  if (!db) {
+    db = new Database(filename, databaseConfig);
+    db.pragma("journal_mode = WAL");
+    db.prepare(
+      "CREATE TABLE IF NOT EXISTS BaileysAuth (id TEXT PRIMARY KEY, value TEXT NOT NULL)"
+    ).run();
+    databases.set(filename, db);
+  }
+  return db;
+}
+
 export async function useSQLiteAuthState(
   options: SQLiteAuthStateOptions
 ): Promise<SQliteAuthState> {
   const { filename, sessionId, ...databaseConfig } = options;
   const prefix = `baileys-auth-state:${sessionId}`;
-  const db = new Database(filename, databaseConfig);
-  db.pragma("journal_mode = WAL");
-  db.prepare(
-    "CREATE TABLE IF NOT EXISTS BaileysAuth (id TEXT PRIMARY KEY, value TEXT NOT NULL)"
-  ).run();
+  const db = getDatabase(filename, databaseConfig);
   const readData = (key: string) => {
     const row = db
       .prepare("SELECT value FROM BaileysAuth WHERE id = ?")

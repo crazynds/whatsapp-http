@@ -79,6 +79,7 @@ export class WhatsappService {
   private status = "off";
   private removeCreds: (() => Promise<void>) | null = null;
   private reconnectAttempts = 0;
+  private lidImportQueued = false;
   /** Renovação do "digitando..." por conversa, enquanto o backend gera a resposta. */
   private typingTimers = new Map<string, NodeJS.Timeout>();
 
@@ -172,7 +173,10 @@ export class WhatsappService {
     }
     this.removeCreds = removeCreds ?? null;
 
-    if (dbState?.db) {
+    // Só na primeira conexão: reconexões não trazem mapeamentos novos no auth
+    // state e a importação varre milhares de linhas a cada vez.
+    if (dbState?.db && !this.lidImportQueued) {
+      this.lidImportQueued = true;
       queueLidMappingImport(dbState.db, this.sessionId);
     }
 

@@ -123,6 +123,7 @@ export class WhatsappService {
    * entrar em loop apertado de reconexões quando a rede está instável.
    */
   private scheduleReconnect(sessionDir: string) {
+    this.status = "reconnecting";
     this.reconnectAttempts += 1;
     const delayMs = Math.min(30_000, 1000 * 2 ** (this.reconnectAttempts - 1));
     logger.warn(
@@ -511,5 +512,9 @@ export class WhatsappService {
 
   public getStatus() {
     return this.status;
+  }
+
+  public isConnected() {
+    return this.status === "opened" && !!this.sock;
   }
 }

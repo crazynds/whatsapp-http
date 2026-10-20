@@ -9,7 +9,8 @@ import {
 import multer from "multer";
 import path from "path";
 import fs from "fs";
-import { findClient } from "../whatsapp_api/findClient";
+import { clients } from "../whatsapp_api";
+import ClientModel from "../models/client";
 import log from "../lib/logger";
 import { getWhatsAppId } from "../whatsapp_api/formatNumbers";
 
@@ -20,6 +21,43 @@ if (!fs.existsSync(uploadDir)) {
 }
 
 const router = express.Router();
+
+/**
+ * Busca o client e garante que ele está conectado ao WhatsApp agora. Se não
+ * estiver, já responde com o erro adequado e retorna null.
+ *
+ * Não usa findClient: ele sobe uma sessão nova sob demanda e, se ela não
+ * estiver pronta, apaga o client do banco.
+ */
+async function getConnectedClient(clientId: unknown, res: Response) {
+  const model =
+    typeof clientId === "string" && clientId
+      ? await ClientModel.findByPk(clientId)
+      : null;
+  if (!model) {
+    res.status(404).json({ code: "client_not_found", error: "Client not found" });
+    return null;
+  }
+
+  const waService = clients[clientId as string];
+  if (waService?.isConnected()) return model;
+
+  const status = waService?.getStatus();
+  if (!model.get("ready") || status === "qrCode" || status === "closed") {
+    res.status(409).json({
+      code: "device_disconnected",
+      error:
+        "Device is disconnected from WhatsApp, the QR code must be scanned again",
+    });
+  } else {
+    res.status(503).json({
+      code: "device_offline",
+      error:
+        "Device is not connected to WhatsApp right now (reconnecting), try again in a few seconds",
+    });
+  }
+  return null;
+}
 
 // /**
 //  * @swagger
@@ -164,19 +202,25 @@ const router = express.Router();
  *                   before sending. Can also be passed as a query parameter.
  *     responses:
  *       200:
- *         description: Message sent successfully
- *       400:
- *         description: Client not ready or invalid request
+ *         description: Message sent successfully (responds only after the send completes)
  *       404:
- *         description: Client or chat not found
+ *         description: Client not found (code client_not_found)
+ *       409:
+ *         description: Device disconnected, the QR code must be scanned again (code device_disconnected)
+ *       500:
+ *         description: WhatsApp rejected or failed to send the message (code send_failed)
+ *       503:
+ *         description: Device temporarily offline / reconnecting, try again later (code device_offline)
  */
 router.post(
   "/chat/:chatId",
   upload.single("media"),
   async (req: Request, res: Response) => {
-    const client = await findClient(req.query.clientId);
-    if (!client) return res.status(404).send("Client not found");
-    if (!client.get("ready")) return res.status(400).send("Client not ready");
+    const client = await getConnectedClient(req.query.clientId, res);
+    if (!client) {
+      if (req.file) fs.promises.unlink(req.file.path).catch(() => {});
+      return;
+    }
 
     const chatId = getWhatsAppId(req.params.chatId);
 
@@ -207,9 +251,8 @@ router.post(
         await fs.promises.rename(req.file.path, finalMediaPath);
       }
 
-      res.status(200).send("OK");
-
-      sendMessage(
+      // Aguarda o envio para que quem chamou saiba se a mensagem saiu
+      await sendMessage(
         client,
         chatId,
         message ?? null,
@@ -218,24 +261,21 @@ router.post(
         response_to_id ?? null,
         isVoice,
         simulateTyping
-      )
-        .catch((err) => {
-          log.error(`Failed to send message: ${err}`);
-        })
-        .finally(async () => {
-          if (finalMediaPath) {
-            try {
-              await fs.promises.unlink(finalMediaPath);
-            } catch (unlinkErr) {
-              log.error(
-                `Failed to delete media file: ${finalMediaPath}`,
-                unlinkErr
-              );
-            }
-          }
-        });
+      );
+      res.status(200).send("OK");
     } catch (err) {
-      res.status(500).json({ error: `error sending message: ${err}` });
+      log.error(`Failed to send message: ${err}`);
+      res
+        .status(500)
+        .json({ code: "send_failed", error: `error sending message: ${err}` });
+    } finally {
+      if (finalMediaPath) {
+        try {
+          await fs.promises.unlink(finalMediaPath);
+        } catch (unlinkErr) {
+          log.error(`Failed to delete media file: ${finalMediaPath}`, unlinkErr);
+        }
+      }
     }
   }
 );
@@ -275,15 +315,16 @@ router.post(
  *     responses:
  *       200:
  *         description: Presence updated
- *       400:
- *         description: Client not ready
  *       404:
- *         description: Client not found
+ *         description: Client not found (code client_not_found)
+ *       409:
+ *         description: Device disconnected, the QR code must be scanned again (code device_disconnected)
+ *       503:
+ *         description: Device temporarily offline / reconnecting, try again later (code device_offline)
  */
 router.post("/chat/:chatId/typing", async (req: Request, res: Response) => {
-  const client = await findClient(req.query.clientId);
-  if (!client) return res.status(404).send("Client not found");
-  if (!client.get("ready")) return res.status(400).send("Client not ready");
+  const client = await getConnectedClient(req.query.clientId, res);
+  if (!client) return;
 
   const chatId = getWhatsAppId(req.params.chatId);
   const typing = req.body?.typing !== false;

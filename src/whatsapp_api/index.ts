@@ -246,9 +246,12 @@ export async function getContact(model: Model<any, any>, chatId: string) {
 
 export async function deleteClient(clientId: any) {
   const client = clients[clientId ?? ""];
-  ClientModel.destroy({ where: { clientId: clientId } });
-  if (!client) return;
-  client.logout();
-  client.destroy();
   delete clients[clientId];
+  try {
+    await ClientModel.destroy({ where: { clientId: clientId } });
+  } catch (error) {
+    logger.error(`Falha ao remover client ${clientId} do banco:`, error);
+  }
+  if (!client) return;
+  await client.destroy(); // Faz logout e remove as credenciais
 }

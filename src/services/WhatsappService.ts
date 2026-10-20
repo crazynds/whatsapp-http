@@ -238,13 +238,14 @@ export class WhatsappService {
       }
       if (connection === "close") {
         const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
-        // Only logout (session revoked pelo usuário) e badSession (auth
-        // corrompida) são permanentes; qualquer outro motivo (rede, timeout,
-        // restart, status desconhecido/não-Boom, etc.) deve reconectar, senão
-        // blips transitórios acabam apagando a sessão como se fosse logout.
-        const isPermanent =
-          statusCode === DisconnectReason.loggedOut ||
-          statusCode === DisconnectReason.badSession;
+        // Só logout (sessão revogada pelo usuário) é permanente; qualquer outro
+        // motivo (rede, timeout, restart, status desconhecido/não-Boom, etc.)
+        // deve reconectar, senão blips transitórios acabam apagando a sessão
+        // como se fosse logout. badSession NÃO entra aqui: ele vale 500, o
+        // mesmo código que o Baileys usa como default para qualquer
+        // stream:error desconhecido (ex: <stream:error><ack/></stream:error>),
+        // então tratar 500 como permanente apaga sessões saudáveis.
+        const isPermanent = statusCode === DisconnectReason.loggedOut;
 
         if (!isPermanent) this.scheduleReconnect(sessionDir);
         else if ("close" in this.callbacks) {

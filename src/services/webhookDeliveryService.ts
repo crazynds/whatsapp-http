@@ -17,6 +17,9 @@ async function attemptSend(row: InstanceType<typeof PendingWebhook>) {
     });
     if (res.ok) {
       await row.destroy();
+      log.http(
+        `Webhook entregue (client: ${row.get("clientId")}, status: ${res.status})`,
+      );
       return true;
     }
     log.warn(

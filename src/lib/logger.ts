@@ -24,6 +24,24 @@ const colors = {
 // Add colors to winston
 winston.addColors(colors);
 
+// O json() do winston serializa Error como {} (perde message e stack), então
+// convertemos qualquer Error no primeiro nível dos metadados (ex: { err },
+// { error }, ou o próprio erro passado como segundo argumento).
+const serializeErrors = winston.format((info) => {
+  for (const key of Object.keys(info)) {
+    const value = (info as any)[key];
+    if (value instanceof Error) {
+      (info as any)[key] = {
+        ...value,
+        name: value.name,
+        message: value.message,
+        stack: value.stack,
+      };
+    }
+  }
+  return info;
+});
+
 // Custom format for console output
 const consoleFormat = printf(({ level, message, timestamp, ...meta }) => {
   return `${timestamp} [${level}]: ${message} ${
@@ -36,6 +54,8 @@ const logger = winston.createLogger({
   level: process.env.LOG_LEVEL || "http",
   levels,
   format: combine(
+    winston.format.errors({ stack: true }),
+    serializeErrors(),
     timestamp({ format: "YYYY-MM-DD HH:mm:ss.SSS" }),
     json(),
     align()
@@ -53,6 +73,16 @@ const logger = winston.createLogger({
     new winston.transports.File({
       filename: path.join("data/logs", "error.log"),
       level: "error",
+      // Rotaciona em 20MB mantendo 5 arquivos (error.log, error1.log, ...)
+      maxsize: 20 * 1024 * 1024,
+      maxFiles: 5,
+      tailable: true,
+    }),
+  ],
+  // Exceção não tratada derruba o processo: grava o motivo antes de sair
+  exceptionHandlers: [
+    new winston.transports.File({
+      filename: path.join("data/logs", "crash.log"),
     }),
   ],
 });

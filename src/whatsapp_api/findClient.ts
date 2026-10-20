@@ -29,7 +29,11 @@ export async function findClient(clientId: any, can_create: boolean = false) {
         clientModel.set({
           ready: false,
         });
-        clientModel.save();
+        try {
+          await clientModel.save();
+        } catch (ex) {
+          log.error(`Falha ao marcar client ${clientId} como desconectado:`, ex);
+        }
         if (wh) {
           try {
             await deliverWebhook(clientModel.get("clientId") as string, wh, {
@@ -52,10 +56,15 @@ export async function findClient(clientId: any, can_create: boolean = false) {
                 },
               ],
             });
-          } catch (ex) {}
+          } catch (ex) {
+            log.error(
+              `Falha ao enviar webhook de desconexão do client ${clientId}:`,
+              ex,
+            );
+          }
         }
-        deleteClient(clientModel.get("clientId")); // Delete model from database
-        waService.destroy(); // Clear session dir and close connection
+        await deleteClient(clientModel.get("clientId")); // Delete model from database
+        await waService.destroy(); // Clear session dir and close connection
         resolve(false);
       };
 

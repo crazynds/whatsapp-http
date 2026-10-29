@@ -31,6 +31,10 @@ function getDatabase(filename: string, databaseConfig: Options): DB {
   if (!db) {
     db = new Database(filename, databaseConfig);
     db.pragma("journal_mode = WAL");
+    // Em WAL, NORMAL só faz fsync no checkpoint (não a cada commit) e continua
+    // sem risco de corromper o banco; num disco lento cada fsync travava o
+    // event loop, já que o better-sqlite3 é síncrono.
+    db.pragma("synchronous = NORMAL");
     db.prepare(
       "CREATE TABLE IF NOT EXISTS BaileysAuth (id TEXT PRIMARY KEY, value TEXT NOT NULL)"
     ).run();

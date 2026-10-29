@@ -14,8 +14,11 @@ const sequelize = new Sequelize({
 
 // Sem busyTimeout o sqlite3 falha na hora com SQLITE_BUSY quando outra
 // conexão está escrevendo; assim ele espera o lock ser liberado.
+// synchronous=NORMAL: em WAL só faz fsync no checkpoint, não a cada commit.
 sequelize.hooks.addListener("afterConnect", (connection) => {
-  (connection as unknown as Database).configure("busyTimeout", 10_000);
+  const db = connection as unknown as Database;
+  db.configure("busyTimeout", 10_000);
+  db.run("PRAGMA synchronous = NORMAL");
 });
 
 export default sequelize;

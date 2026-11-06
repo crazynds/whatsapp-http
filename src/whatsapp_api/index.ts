@@ -46,7 +46,8 @@ export async function sendMessage(
   mimetype: string | null = null,
   responseToId: string | null = null,
   isAudio: boolean = false,
-  simulateTyping: boolean = false
+  simulateTyping: boolean = false,
+  fileName: string | null = null
 ) {
   const clientId = model.get("clientId") as string | null;
   const client = clients[clientId ?? ""];
@@ -58,7 +59,8 @@ export async function sendMessage(
     mediaPath,
     mimetype,
     isAudio,
-    simulateTyping
+    simulateTyping,
+    fileName
   );
 }
 

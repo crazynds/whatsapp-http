@@ -232,12 +232,14 @@ router.post(
 
     let finalMediaPath: string | null = null;
     let mimetype: string | null = null;
+    let fileName: string | null = null;
 
     try {
       let isVoice: boolean = false;
       if (req.file) {
         isVoice = req.query.voice === "true";
         mimetype = req.file.mimetype ?? null;
+        fileName = req.file.originalname ?? null;
 
         // Ensure ./media exists
         const mediaDir = path.join(process.cwd(), "media");
@@ -260,7 +262,8 @@ router.post(
         mimetype,
         response_to_id ?? null,
         isVoice,
-        simulateTyping
+        simulateTyping,
+        fileName
       );
       res.status(200).send("OK");
     } catch (err) {

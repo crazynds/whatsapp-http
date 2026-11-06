@@ -355,6 +355,7 @@ export class WhatsappService {
     mimetype: string | null = null,
     isVoice: boolean = false,
     simulateTyping: boolean = false,
+    fileName: string | null = null,
   ) {
     if (!this.sock) throw new Error("Socket não inicializado");
     if (!message && !mediaPath)
@@ -373,7 +374,7 @@ export class WhatsappService {
       this.sock.sendPresenceUpdate("available", jid);
     }
 
-    const content = this.buildMessageContent(message, mediaPath, mimetype, isVoice);
+    const content = this.buildMessageContent(message, mediaPath, mimetype, isVoice, fileName);
     await this.sock.sendMessage(jid, content);
     if (simulateTyping) this.sock.sendPresenceUpdate("unavailable");
   }
@@ -447,6 +448,7 @@ export class WhatsappService {
     mediaPath: string | null,
     mimetype: string | null,
     isVoice: boolean,
+    fileName: string | null = null,
   ): AnyMessageContent {
     if (!mediaPath) {
       return { text: message ?? "" };
@@ -465,7 +467,8 @@ export class WhatsappService {
     return {
       document: { url: mediaPath },
       mimetype: mime,
-      fileName: path.basename(mediaPath),
+      // O arquivo em disco ganha um prefixo de timestamp; quem recebe deve ver o nome enviado.
+      fileName: fileName ?? path.basename(mediaPath),
       caption,
     };
   }

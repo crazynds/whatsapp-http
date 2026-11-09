@@ -462,7 +462,13 @@ export class WhatsappService {
       return { video: { url: mediaPath }, mimetype: mime, caption };
     }
     if (mime.startsWith("audio/")) {
-      return { audio: { url: mediaPath }, mimetype: mime, ptt: isVoice };
+      // Nota de voz só toca no WhatsApp como "audio/ogg; codecs=opus"; com
+      // "audio/ogg" puro a mensagem sai, mas o destinatário não consegue ouvir.
+      const audioMime =
+        isVoice && /^audio\/(ogg|opus)\b/.test(mime)
+          ? "audio/ogg; codecs=opus"
+          : mime;
+      return { audio: { url: mediaPath }, mimetype: audioMime, ptt: isVoice };
     }
     return {
       document: { url: mediaPath },

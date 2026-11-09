@@ -20,6 +20,30 @@ if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
 
+const UPLOAD_MAX_AGE_MS = 60 * 60 * 1000;
+
+/**
+ * Rede de segurança: a rota apaga o upload ao terminar, mas um restart no meio
+ * do envio (ou uma falha antiga) deixaria o arquivo para sempre no disco.
+ * Nenhum envio leva uma hora, então o que passou disso é lixo.
+ */
+async function sweepUploads() {
+  try {
+    const now = Date.now();
+    for (const name of await fs.promises.readdir(uploadDir)) {
+      const file = path.join(uploadDir, name);
+      const stat = await fs.promises.stat(file);
+      if (stat.isFile() && now - stat.mtimeMs > UPLOAD_MAX_AGE_MS) {
+        await fs.promises.unlink(file);
+      }
+    }
+  } catch (err) {
+    log.error(`Failed to sweep uploads: ${err}`);
+  }
+}
+void sweepUploads();
+setInterval(sweepUploads, UPLOAD_MAX_AGE_MS).unref();
+
 const router = express.Router();
 
 /**
@@ -241,16 +265,10 @@ router.post(
         mimetype = req.file.mimetype ?? null;
         fileName = req.file.originalname ?? null;
 
-        // Ensure ./media exists
-        const mediaDir = path.join(process.cwd(), "media");
-        await fs.promises.mkdir(mediaDir, { recursive: true });
-
-        // Build final file path in ./media
-        const filename = `${Date.now()}_${req.file.originalname}`;
-        finalMediaPath = path.join(mediaDir, filename);
-
-        // Move file to ./media
-        await fs.promises.rename(req.file.path, finalMediaPath);
+        // Usa o arquivo onde o multer o gravou. Mover para outra pasta com
+        // rename falha (EXDEV) quando uploads e media são volumes diferentes,
+        // e o nome que o destinatário vê já vem de `fileName`.
+        finalMediaPath = req.file.path;
       }
 
       // Aguarda o envio para que quem chamou saiba se a mensagem saiu

@@ -79,6 +79,8 @@ export class WhatsappService {
   private status = "off";
   private removeCreds: (() => Promise<void>) | null = null;
   private reconnectAttempts = 0;
+  /** Recusas seguidas do servidor do WhatsApp; zera quando a conexão abre. */
+  private serverFailures = 0;
   private lidImportQueued = false;
   /** Renovação do "digitando..." por conversa, enquanto o backend gera a resposta. */
   private typingTimers = new Map<string, NodeJS.Timeout>();
@@ -90,6 +92,14 @@ export class WhatsappService {
   private static readonly TYPING_REFRESH_MS = 8_000;
   /** Teto de segurança: se o backend nunca mandar parar, o indicador some sozinho. */
   private static readonly TYPING_MAX_MS = 120_000;
+  /**
+   * Limite de recusas seguidas do servidor do WhatsApp sem nenhuma conexão
+   * bem-sucedida no meio. Ao atingir, a sessão é tratada como deslogada, em
+   * vez de ficar tentando para sempre (já houve sessão com 838 tentativas em
+   * 40h). Falhas de rede ou locais não contam: sem chegar ao servidor não dá
+   * para saber se a sessão é válida, então elas só seguem com o backoff.
+   */
+  private static readonly MAX_SERVER_FAILURES = 30;
 
   constructor(sessionId: string) {
     this.sessionId = sessionId;
@@ -122,12 +132,23 @@ export class WhatsappService {
    * Reconecta com backoff exponencial (1s, 2s, 4s... até 30s) para não
    * entrar em loop apertado de reconexões quando a rede está instável.
    */
-  private scheduleReconnect(sessionDir: string) {
+  private scheduleReconnect(sessionDir: string, error?: unknown) {
+    const reason = WhatsappService.describeError(error);
+    if (WhatsappService.isServerRejection(error)) {
+      this.serverFailures += 1;
+      if (this.serverFailures >= WhatsappService.MAX_SERVER_FAILURES) {
+        logger.error(
+          `${this.sessionId} - servidor do WhatsApp recusou ${this.serverFailures} conexões seguidas, sessão será deslogada (último motivo: ${reason})`,
+        );
+        this.logoutPermanently();
+        return;
+      }
+    }
     this.status = "reconnecting";
     this.reconnectAttempts += 1;
     const delayMs = Math.min(30_000, 1000 * 2 ** (this.reconnectAttempts - 1));
     logger.warn(
-      `${this.sessionId} - reconectando em ${delayMs}ms (tentativa ${this.reconnectAttempts})`,
+      `${this.sessionId} - reconectando em ${delayMs}ms (tentativa ${this.reconnectAttempts}, recusas do servidor ${this.serverFailures}/${WhatsappService.MAX_SERVER_FAILURES}, motivo: ${reason})`,
     );
     setTimeout(() => {
       this.connect(sessionDir);
@@ -135,9 +156,22 @@ export class WhatsappService {
   }
 
   /**
-   * Inicializa a sessão do WhatsApp
+   * Inicializa a sessão do WhatsApp. Nunca rejeita: se a abertura falhar
+   * (ex: banco travado com ConnectionAcquireTimeoutError), agenda outra
+   * tentativa. Antes a falha virava uma rejeição solta e a sessão ficava
+   * parada para sempre, sem socket e sem nova tentativa.
    */
   public async connect(sessionDir: string): Promise<void> {
+    try {
+      await this.openSocket(sessionDir);
+    } catch (error) {
+      if (this.status === "closed") return;
+      logger.error(`${this.sessionId} - falha ao conectar`, error);
+      this.scheduleReconnect(sessionDir, error);
+    }
+  }
+
+  private async openSocket(sessionDir: string): Promise<void> {
     this.teardownSocket();
     const oldSessionDir = path.join(sessionDir, `${this.sessionId}`);
     const oldState = await useMultiFileAuthState(oldSessionDir);
@@ -228,6 +262,9 @@ export class WhatsappService {
       browser,
       syncFullHistory: false,
       markOnlineOnConnect: false,
+      // Sem isto o Baileys reemite como upsert "append" cada mensagem enviada
+      // pela API, e ela voltaria como webhook (ver handler de messages.upsert).
+      emitOwnEvents: false,
       logger: customLogger,
     });
 
@@ -252,33 +289,34 @@ export class WhatsappService {
         // então tratar 500 como permanente apaga sessões saudáveis.
         const isPermanent = statusCode === DisconnectReason.loggedOut;
 
-        if (!isPermanent) this.scheduleReconnect(sessionDir);
-        else if ("close" in this.callbacks) {
+        if (!isPermanent) {
+          this.scheduleReconnect(sessionDir, lastDisconnect?.error);
+        } else {
           logger.error("Disconected, reason: ", lastDisconnect?.error);
-          if (removeCreds) removeCreds().then(() => {});
-          this.status = "closed";
-
-          this.callbacks["close"]();
+          this.logoutPermanently();
         }
       } else if (connection === "open") {
         this.reconnectAttempts = 0;
+        this.serverFailures = 0;
         this.status = "opened";
         if ("open" in this.callbacks) this.callbacks["open"]();
       }
     });
 
     this.sock.ev.on("messages.upsert", async (m) => {
-      if (m.type == "notify") {
-        if ("message" in this.callbacks)
-          this.callbacks["message"]({
-            ...m,
-            messages: m.messages,
-            //.filter((m) => !m.key.fromMe),
-          });
-      } else {
-        // old already seen / handled messages
-        // handle them however you want to
-      }
+      // "append" não é histórico: é como o Baileys entrega as mensagens que
+      // chegaram enquanto a sessão estava desconectada (fila offline). Ignorar
+      // esse tipo descartava tudo que chegou durante reconexões e restarts, e
+      // enquanto a fila não esvazia até as mensagens novas vêm por ela.
+      // Newsletters também chegam como "append" e não interessam.
+      const messages =
+        m.type === "notify"
+          ? m.messages
+          : m.messages.filter(
+              (msg) => !msg.key.remoteJid?.endsWith("@newsletter"),
+            );
+      if (messages.length && "message" in this.callbacks)
+        this.callbacks["message"]({ ...m, messages });
     });
     this.sock.ev.on(
       "messaging-history.set",
@@ -517,6 +555,45 @@ export class WhatsappService {
     } catch (e) {}
     // Remove session credentials from SQLite
     if (this.removeCreds) await this.removeCreds();
+  }
+
+  /**
+   * Se o erro veio de um nó enviado pelo próprio servidor do WhatsApp
+   * (<failure> ou <stream:error>). Só nesses casos a conexão de fato chegou
+   * ao servidor e foi recusada; queda de rede, timeout, socket fechado sem
+   * resposta ou erro local (ex: banco travado) não entram.
+   */
+  private static isServerRejection(error: unknown): boolean {
+    if (!WhatsappService.isBoom(error)) return false;
+    return (
+      error.message === "Connection Failure" ||
+      error.message.startsWith("Stream Errored")
+    );
+  }
+
+  /** Pelo campo isBoom: o Baileys pode trazer outra cópia do @hapi/boom. */
+  private static isBoom(error: unknown): error is Boom {
+    return error instanceof Error && (error as Boom).isBoom === true;
+  }
+
+  private static describeError(error: unknown): string {
+    if (!error) return "desconhecido";
+    if (WhatsappService.isBoom(error))
+      return `${error.output?.statusCode ?? "?"} ${error.message}`;
+    if (error instanceof Error) return error.message;
+    return String(error);
+  }
+
+  /**
+   * Sessão perdida de vez (logout pelo usuário ou limite de reconexões):
+   * apaga as credenciais e avisa o findClient, que manda o webhook de
+   * desconexão e remove o client.
+   */
+  private logoutPermanently() {
+    this.status = "closed";
+    this.teardownSocket();
+    if (this.removeCreds) this.removeCreds().catch(() => {});
+    if ("close" in this.callbacks) this.callbacks["close"]();
   }
 
   public getStatus() {

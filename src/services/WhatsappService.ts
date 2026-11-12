@@ -265,6 +265,10 @@ export class WhatsappService {
       // Sem isto o Baileys reemite como upsert "append" cada mensagem enviada
       // pela API, e ela voltaria como webhook (ver handler de messages.upsert).
       emitOwnEvents: false,
+      // O histórico de conversas que o WhatsApp manda ao parear/reconectar não
+      // é usado (o handler de messaging-history.set é vazio), mas baixar e
+      // decodificar esses pacotes aloca bastante memória.
+      shouldSyncHistoryMessage: () => false,
       logger: customLogger,
     });
 

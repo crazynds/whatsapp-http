@@ -5,6 +5,9 @@ import { findClient } from "../whatsapp_api/findClient";
 
 const router = express.Router();
 
+/** Quanto a rota de QR code espera a sessão ficar pronta antes de responder. */
+const QR_CODE_WAIT_MS = 20_000;
+
 /**
  * @swagger
  * /api/auth/qrCode:
@@ -40,10 +43,26 @@ router.get("/qrCode", async (req: Request, res: Response) => {
     res.status(422).send("You need to provide some clientId");
     return;
   }
-  var client;
-  do {
-    client = await findClient(id, true);
-  } while (!client);
+  // findClient só resolve quando a sessão gera QR, conecta ou cai. Se nada
+  // disso acontecer (ex: sessão antiga ainda sendo desmontada após um DELETE),
+  // a requisição ficava pendurada até o timeout de quem chamou.
+  const timeout = new Promise<"timeout">((resolve) =>
+    setTimeout(() => resolve("timeout"), QR_CODE_WAIT_MS),
+  );
+  const load = (async () => {
+    let found;
+    do {
+      found = await findClient(id, true);
+    } while (!found);
+    return found;
+  })();
+  const client = await Promise.race([load, timeout]);
+  if (client === "timeout") {
+    res.status(200).send(`
+          <p>Wait a few seconds and try again: Loading...</p>
+      `);
+    return;
+  }
   id = client.get("clientId") as string;
   if (wh) {
     client.set("webHook", wh);

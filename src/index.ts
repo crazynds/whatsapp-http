@@ -7,6 +7,7 @@ import {
   retryPendingWebhooksOnStartup,
   startWebhookRetryLoop,
 } from "./services/webhookDeliveryService";
+import { startMemoryMonitor } from "./lib/memoryMonitor";
 
 // Uma promise rejeitada sem catch (ex: timeout do pool do sequelize) não pode
 // derrubar o processo inteiro e desconectar todas as sessões junto.
@@ -28,6 +29,7 @@ sequelize
   // Retry webhooks that didn't get delivered before the process restarted
   .then(retryPendingWebhooksOnStartup)
   .then(startWebhookRetryLoop)
+  .then(startMemoryMonitor)
   .catch((error) => {
     log.error("Unable to start:", error);
     process.exit(1);

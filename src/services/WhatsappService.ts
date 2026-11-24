@@ -273,6 +273,7 @@ export class WhatsappService {
     });
 
     this.status = "started";
+    this.drainOfflineQueue(this.sock);
 
     this.sock.ev.on("creds.update", saveCreds);
 
@@ -341,6 +342,51 @@ export class WhatsappService {
     });
     this.sock.ev.on("lid-mapping.update", (mapping) => {
       if ("lidMapping" in this.callbacks) this.callbacks["lidMapping"](mapping);
+    });
+  }
+
+  /**
+   * Ao conectar, o Baileys pede ao WhatsApp só o primeiro lote (100 itens) da
+   * fila de mensagens recebidas enquanto a sessão estava fora e nunca pede o
+   * resto. Com uma fila maior que isso, o restante fica parado no servidor e as
+   * mensagens novas entram atrás dele: a sessão aparece conectada, mas não
+   * recebe nada até a próxima reconexão puxar mais 100. Aqui pedimos o próximo
+   * lote sempre que o anterior chega inteiro, até o servidor avisar o fim.
+   */
+  private drainOfflineQueue(sock: WASocket) {
+    const BATCH_SIZE = 100;
+    let receivedInBatch = 0;
+    let batches = 1;
+    let done = false;
+    const onNode = (node: { attrs?: { offline?: string } }) => {
+      if (done || !node?.attrs?.offline) return;
+      receivedInBatch += 1;
+      if (receivedInBatch < BATCH_SIZE) return;
+      receivedInBatch = 0;
+      batches += 1;
+      logger.info(
+        `${this.sessionId} - pedindo lote ${batches} da fila offline`,
+      );
+      sock
+        .sendNode({
+          tag: "ib",
+          attrs: {},
+          content: [
+            { tag: "offline_batch", attrs: { count: String(BATCH_SIZE) } },
+          ],
+        })
+        .catch((error) =>
+          logger.warn(`${this.sessionId} - falha ao pedir lote offline`, error),
+        );
+    };
+    for (const tag of ["message", "receipt", "notification", "call"])
+      sock.ws.on(`CB:${tag}`, onNode);
+    sock.ws.on("CB:ib,,offline", () => {
+      if (!done && batches > 1)
+        logger.info(
+          `${this.sessionId} - fila offline esvaziada em ${batches} lotes`,
+        );
+      done = true;
     });
   }
 

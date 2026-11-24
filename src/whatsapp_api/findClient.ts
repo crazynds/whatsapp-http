@@ -132,12 +132,18 @@ export async function findClient(clientId: any, can_create: boolean = false) {
               );
             })
             .filter((message) => {
-              return (
+              const supported =
                 message.message?.audioMessage ||
                 (message.message?.extendedTextMessage
                   ? (message.message.extendedTextMessage.text ?? "")
-                  : (message.message?.conversation ?? ""))
-              );
+                  : (message.message?.conversation ?? ""));
+              // Registra o que não vira webhook, para nenhuma mensagem sumir
+              // sem rastro (protocolMessage/reações/recibos são esperados aqui).
+              if (!supported)
+                log.http(
+                  `${clientId} - mensagem sem webhook (from ${message.key.remoteJid}, fromMe=${message.key.fromMe}, tipo=${Object.keys(message.message ?? {}).join(",") || "vazio"})`,
+                );
+              return supported;
             }),
           [],
         );

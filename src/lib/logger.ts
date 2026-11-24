@@ -1,4 +1,5 @@
 import winston from "winston";
+import DailyRotateFile from "winston-daily-rotate-file";
 import path from "path";
 
 const { combine, timestamp, printf, colorize, align, json } = winston.format;
@@ -51,7 +52,8 @@ const consoleFormat = printf(({ level, message, timestamp, ...meta }) => {
 
 // Create logger instance
 const logger = winston.createLogger({
-  level: process.env.LOG_LEVEL || "http",
+  // O logger deixa passar tudo; cada transport decide o próprio nível.
+  level: "debug",
   levels,
   format: combine(
     winston.format.errors({ stack: true }),
@@ -63,6 +65,7 @@ const logger = winston.createLogger({
   transports: [
     // Console transport
     new winston.transports.Console({
+      level: process.env.LOG_LEVEL || "http",
       format: combine(
         colorize({ all: true }),
         timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
@@ -77,6 +80,15 @@ const logger = winston.createLogger({
       maxsize: 20 * 1024 * 1024,
       maxFiles: 5,
       tailable: true,
+    }),
+    // Log completo (todos os níveis, inclusive debug) para investigação: um
+    // arquivo por hora, apagado depois de 24h. Fica em data/logs/full-*.log.
+    new DailyRotateFile({
+      dirname: "data/logs",
+      filename: "full-%DATE%.log",
+      datePattern: "YYYY-MM-DD-HH",
+      level: "debug",
+      maxFiles: "24h",
     }),
   ],
   // Exceção não tratada derruba o processo: grava o motivo antes de sair

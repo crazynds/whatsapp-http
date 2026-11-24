@@ -7,6 +7,7 @@ import makeWASocket, {
   AuthenticationState,
   BufferJSON,
   AnyMessageContent,
+  normalizeMessageContent,
 } from "baileys";
 import { Boom } from "@hapi/boom";
 import * as path from "path";
@@ -230,30 +231,43 @@ export class WhatsappService {
         return null;
       },
       debug(obj: any, msg?: string) {
-        if (!msg) return;
-        //logger.debug(msg, obj);
+        // Só vai para o log completo em arquivo (o console fica em http)
+        if (typeof obj === "string") logger.debug(sessionId + " - " + obj);
+        else if (msg) logger.debug(sessionId + " - " + msg, { dados: obj });
       },
+      // O Baileys chama tanto logger.x(obj, "msg") quanto logger.x("msg");
+      // antes a segunda forma era descartada e sumiam linhas como
+      // "handled N offline messages".
       info(obj: any, msg?: string) {
-        if (!msg) return;
+        if (typeof obj === "string") {
+          logger.info(sessionId + " - " + obj);
+          return;
+        }
+        if (!msg) {
+          logger.debug(sessionId + " - info", { dados: obj });
+          return;
+        }
         switch (msg) {
           case "connected to WA":
           case "not logged in, attempting registration...":
-            logger.debug(sessionId + " - " + msg, obj);
-            break;
-          case "logging in...":
-            logger.info(sessionId + " - " + msg);
+            logger.debug(sessionId + " - " + msg, { dados: obj });
             break;
           default:
             logger.info(sessionId + " - " + msg);
+            // Detalhes só no log completo em arquivo
+            if (obj && Object.keys(obj).length)
+              logger.debug(sessionId + " - " + msg + " (detalhes)", {
+                dados: obj,
+              });
         }
       },
       warn(obj: any, msg?: string) {
-        if (!msg) return;
-        logger.warn(sessionId + " - " + msg, obj);
+        if (typeof obj === "string") logger.warn(sessionId + " - " + obj);
+        else if (msg) logger.warn(sessionId + " - " + msg, obj);
       },
       error(obj: any, msg?: string) {
-        if (!msg) return;
-        logger.error(sessionId + " - " + msg, obj);
+        if (typeof obj === "string") logger.error(sessionId + " - " + obj);
+        else if (msg) logger.error(sessionId + " - " + msg, obj);
       },
     } as ILogger;
     this.sock = makeWASocket({
@@ -309,6 +323,16 @@ export class WhatsappService {
     });
 
     this.sock.ev.on("messages.upsert", async (m) => {
+      // Registro de tudo que chega, antes de qualquer filtro: resumo no
+      // console e a mensagem inteira no log completo em arquivo.
+      for (const msg of m.messages) {
+        logger.http(
+          `${this.sessionId} - recebida (${m.type}) from=${msg.key.remoteJid} alt=${msg.key.remoteJidAlt ?? "-"} fromMe=${msg.key.fromMe} id=${msg.key.id} tipo=${Object.keys(msg.message ?? {}).join(",") || "vazio"}`,
+        );
+        logger.debug(`${this.sessionId} - recebida (conteúdo)`, {
+          dados: { type: m.type, mensagem: msg },
+        });
+      }
       // "append" não é histórico: é como o Baileys entrega as mensagens que
       // chegaram enquanto a sessão estava desconectada (fila offline). Ignorar
       // esse tipo descartava tudo que chegou durante reconexões e restarts, e
@@ -320,6 +344,13 @@ export class WhatsappService {
           : m.messages.filter(
               (msg) => !msg.key.remoteJid?.endsWith("@newsletter"),
             );
+      // Conversas com mensagens temporárias, visualização única, edições etc.
+      // chegam embrulhadas (ex: ephemeralMessage.message.conversation). Sem
+      // desembrulhar, o filtro de texto/áudio descartava essas mensagens.
+      for (const msg of messages) {
+        const content = normalizeMessageContent(msg.message);
+        if (content) msg.message = content;
+      }
       if (messages.length && "message" in this.callbacks)
         this.callbacks["message"]({ ...m, messages });
     });

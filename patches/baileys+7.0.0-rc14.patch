@@ -1,8 +1,52 @@
 diff --git a/node_modules/baileys/lib/Socket/messages-recv.js b/node_modules/baileys/lib/Socket/messages-recv.js
-index f2003ac..b1e712f 100644
+index f2003ac..ee6c34e 100644
 --- a/node_modules/baileys/lib/Socket/messages-recv.js
 +++ b/node_modules/baileys/lib/Socket/messages-recv.js
-@@ -1576,11 +1576,24 @@ export const makeMessagesRecvSocket = (config) => {
+@@ -416,7 +416,9 @@ export const makeMessagesRecvSocket = (config) => {
+         const key = `${msgId}:${msgKey?.participant}`;
+         const retryCount = (await msgRetryCache.get(key)) || 1;
+         const { account, signedPreKey, signedIdentityKey: identityKey } = authState.creds;
+-        const fromJid = node.attrs.from;
++        // patch (Baileys #2901): em grupo, "from" é o grupo; a sessão a validar
++        // ou recriar é a de quem enviou (participant).
++        const fromJid = node.attrs.participant || node.attrs.from;
+         // Check if we should recreate the session
+         let shouldRecreateSession = false;
+         let recreateReason = '';
+@@ -623,8 +625,16 @@ export const makeMessagesRecvSocket = (config) => {
+                 };
+                 break;
+             case 'modify':
+-                const oldNumber = getBinaryNodeChildren(child, 'participant').map(p => p.attrs.jid);
+-                msg.messageStubParameters = oldNumber || [];
++                // patch: o processMessage faz JSON.parse em cada parâmetro (como nos
++                // casos add/remove abaixo); com o jid puro ("5541...@s.whatsapp.net")
++                // o parse quebrava e a notificação inteira era perdida.
++                const oldNumber = getBinaryNodeChildren(child, 'participant').map(({ attrs }) => JSON.stringify({
++                    id: attrs.jid,
++                    phoneNumber: isLidUser(attrs.jid) && isPnUser(attrs.phone_number) ? attrs.phone_number : undefined,
++                    lid: isPnUser(attrs.jid) && isLidUser(attrs.lid) ? attrs.lid : undefined,
++                    admin: (attrs.type || null)
++                }));
++                msg.messageStubParameters = oldNumber;
+                 msg.messageStubType = WAMessageStubType.GROUP_PARTICIPANT_CHANGE_NUMBER;
+                 break;
+             case 'promote':
+@@ -1130,7 +1140,12 @@ export const makeMessagesRecvSocket = (config) => {
+             }
+         }
+         if (!injectedFromBundle) {
+-            await assertSessions([participant], true);
++            // patch: sem force, como o whatsmeow (shouldRecreateSession). Quando a
++            // sessão precisa ser recriada ela já foi apagada acima e é buscada de
++            // novo aqui; com force, cada retry receipt criava uma sessão nova com o
++            // aparelho, e o celular da própria conta (que pede muitos retries)
++            // perdia a sessão que usa (limite de 40 da libsignal).
++            await assertSessions([participant]);
+         }
+         if (isJidGroup(remoteJid)) {
+             await authState.keys.set({ 'sender-key-memory': { [remoteJid]: null } });
+@@ -1576,11 +1591,24 @@ export const makeMessagesRecvSocket = (config) => {
              return exec(node, false).catch(err => onUnexpectedError(err, identifier));
          }
      };
@@ -28,7 +72,7 @@ index f2003ac..b1e712f 100644
      ]), {
          isWsOpen: () => ws.isOpen,
          onUnexpectedError,
-@@ -1621,6 +1634,10 @@ export const makeMessagesRecvSocket = (config) => {
+@@ -1621,6 +1649,10 @@ export const makeMessagesRecvSocket = (config) => {
      ws.on('CB:notification', async (node) => {
          await processNode('notification', node, 'handling notification', handleNotification);
      });

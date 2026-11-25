@@ -1,5 +1,4 @@
-import { FindOrCreateOptions } from "@sequelize/core";
-import ClientModel from "../models/client";
+import { findOrCreateClient } from "../models/client";
 import { clients, deleteClient } from ".";
 import QRCode from "qrcode";
 import { webhookHandler, handleLidMappingUpdate } from "./webhook";
@@ -9,11 +8,7 @@ import { WhatsappService } from "../services/WhatsappService";
 import { deliverWebhook } from "../services/webhookDeliveryService";
 
 export async function findClient(clientId: any, can_create: boolean = false) {
-  const opts: FindOrCreateOptions = {
-    where: { clientId: clientId },
-  };
-
-  const [clientModel, created] = await ClientModel.findOrCreate(opts);
+  const [clientModel, created] = await findOrCreateClient(clientId);
   if (!created && clients[clientId]) {
     return clientModel;
   }
@@ -69,6 +64,16 @@ export async function findClient(clientId: any, can_create: boolean = false) {
       };
 
       waService.onClose(disconectEvent);
+      waService.onQrExpired(async () => {
+        // Sai da memória para o próximo pedido de QR criar uma sessão nova
+        if (clients[clientId] === waService) delete clients[clientId];
+        clientModel.set({ qrCode: null });
+        try {
+          await clientModel.save();
+        } catch (ex) {
+          log.error(`Falha ao limpar QR expirado do client ${clientId}:`, ex);
+        }
+      });
       waService.onQrCode(async (qrCode: string) => {
         clientModel.set({
           qrCode: await QRCode.toDataURL(qrCode),

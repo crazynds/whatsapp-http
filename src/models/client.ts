@@ -18,4 +18,26 @@ const Client = sequelize.define("client", {
   browserFingerprint: DataTypes.STRING,
 });
 
+/**
+ * Substitui o findOrCreate do Sequelize, que roda SELECT + INSERT dentro de
+ * uma transação: no SQLite, subir o lock de leitura para escrita no meio da
+ * transação falha na hora com SQLITE_BUSY quando outra conexão está
+ * escrevendo (o busyTimeout não vale aí, para evitar deadlock). Aqui o INSERT
+ * roda sozinho e espera o lock normalmente.
+ */
+export async function findOrCreateClient(
+  clientId: string,
+): Promise<[InstanceType<typeof Client>, boolean]> {
+  const found = await Client.findByPk(clientId);
+  if (found) return [found, false];
+  try {
+    return [await Client.create({ clientId }), true];
+  } catch (error) {
+    // Outra chamada criou o mesmo client ao mesmo tempo
+    const existing = await Client.findByPk(clientId);
+    if (existing) return [existing, false];
+    throw error;
+  }
+}
+
 export default Client;

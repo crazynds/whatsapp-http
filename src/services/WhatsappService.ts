@@ -22,7 +22,7 @@ import {
   queueLidMappingImport,
 } from "./lidMappingService";
 import { isLidUser } from "baileys";
-import ClientModel from "../models/client";
+import { findOrCreateClient } from "../models/client";
 import { getOrCreateFingerprint } from "./browserFingerprint";
 
 interface ChatInfo {
@@ -101,6 +101,14 @@ export class WhatsappService {
    * para saber se a sessão é válida, então elas só seguem com o backoff.
    */
   private static readonly MAX_SERVER_FAILURES = 30;
+  /**
+   * Ciclos seguidos de QR expirado (408 "QR refs attempts ended", ~2,5 min
+   * cada) numa sessão ainda não pareada antes de parar. Sem isso a sessão
+   * gerava QR para sempre (já houve 149 tentativas seguidas); a próxima
+   * chamada de /client/qrCode cria uma sessão nova e volta a gerar QR.
+   */
+  private static readonly MAX_QR_CYCLES = 3;
+  private qrCycles = 0;
 
   constructor(sessionId: string) {
     this.sessionId = sessionId;
@@ -216,9 +224,7 @@ export class WhatsappService {
       queueLidMappingImport(dbState.db, this.sessionId);
     }
 
-    const [clientModel] = await ClientModel.findOrCreate({
-      where: { clientId: this.sessionId },
-    });
+    const [clientModel] = await findOrCreateClient(this.sessionId);
     const browser = await getOrCreateFingerprint(clientModel);
     const version = await resolveWaVersion();
     const sessionId = this.sessionId;
@@ -303,6 +309,15 @@ export class WhatsappService {
         // stream:error desconhecido (ex: <stream:error><ack/></stream:error>),
         // então tratar 500 como permanente apaga sessões saudáveis.
         const isPermanent = statusCode === DisconnectReason.loggedOut;
+        const qrExpired =
+          !state.creds.me?.id && statusCode === DisconnectReason.timedOut;
+        if (qrExpired) {
+          this.qrCycles += 1;
+          if (this.qrCycles >= WhatsappService.MAX_QR_CYCLES) {
+            this.stopQrCode();
+            return;
+          }
+        }
 
         if (!isPermanent) {
           this.scheduleReconnect(sessionDir, lastDisconnect?.error);
@@ -313,6 +328,7 @@ export class WhatsappService {
       } else if (connection === "open") {
         this.reconnectAttempts = 0;
         this.serverFailures = 0;
+        this.qrCycles = 0;
         this.status = "opened";
         if ("open" in this.callbacks) this.callbacks["open"]();
       }
@@ -671,6 +687,24 @@ export class WhatsappService {
     this.teardownSocket();
     if (this.removeCreds) this.removeCreds().catch(() => {});
     if ("close" in this.callbacks) this.callbacks["close"]();
+  }
+
+  /**
+   * QR expirou várias vezes sem ser lido: para de gerar QR. Não há
+   * credenciais para apagar (a sessão nunca foi pareada) e o cadastro do
+   * client continua; o findClient só tira a sessão da memória.
+   */
+  private stopQrCode() {
+    logger.warn(
+      `${this.sessionId} - QR code não foi lido em ${this.qrCycles} ciclos seguidos, parando até um novo pedido de QR`,
+    );
+    this.status = "qrExpired";
+    this.teardownSocket();
+    if ("qrExpired" in this.callbacks) this.callbacks["qrExpired"]();
+  }
+
+  public onQrExpired(callback: CallableFunction) {
+    this.callbacks["qrExpired"] = callback;
   }
 
   public getStatus() {

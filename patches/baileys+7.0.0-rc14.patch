@@ -1,0 +1,16 @@
+diff --git a/node_modules/baileys/lib/Socket/messages-send.js b/node_modules/baileys/lib/Socket/messages-send.js
+index d61e064..3086b42 100644
+--- a/node_modules/baileys/lib/Socket/messages-send.js
++++ b/node_modules/baileys/lib/Socket/messages-send.js
+@@ -205,7 +205,10 @@ export const makeMessagesSocket = (config) => {
+                 try {
+                     const lids = lidResults.map(a => a.lid);
+                     if (lids.length) {
+-                        await assertSessions(lids, true);
++                        // patch (Baileys #2901): sem force, cria sessão só onde não há uma válida.
++                        // Com force, toda consulta de aparelhos recriava a sessão com o celular
++                        // principal (inclusive o da própria conta), descartando a que ele usa.
++                        await assertSessions(lids);
+                     }
+                 }
+                 catch (e) {

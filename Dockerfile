@@ -19,6 +19,7 @@ ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome \
 
 COPY package*.json ./
 COPY tsconfig*.json ./
+COPY patches ./patches
 
 RUN npm ci 
 

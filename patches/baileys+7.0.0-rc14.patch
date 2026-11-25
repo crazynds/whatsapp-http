@@ -1,3 +1,44 @@
+diff --git a/node_modules/baileys/lib/Socket/messages-recv.js b/node_modules/baileys/lib/Socket/messages-recv.js
+index f2003ac..b1e712f 100644
+--- a/node_modules/baileys/lib/Socket/messages-recv.js
++++ b/node_modules/baileys/lib/Socket/messages-recv.js
+@@ -1576,11 +1576,24 @@ export const makeMessagesRecvSocket = (config) => {
+             return exec(node, false).catch(err => onUnexpectedError(err, identifier));
+         }
+     };
++    // patch (Baileys #2858 / PR #2883): o WhatsApp passou a mandar status de
++    // contatos como stanza <status> de topo. Sem ack, o servidor segura as
++    // mensagens novas do aparelho e derruba o stream ~50 min depois com
++    // <stream:error><ack class="status"/>. Só confirmamos, sem decodificar.
++    const handleStatus = async (node) => {
++        try {
++            await sendMessageAck(node);
++        }
++        catch (error) {
++            onUnexpectedError(error, 'acking status stanza');
++        }
++    };
+     const offlineNodeProcessor = makeOfflineNodeProcessor(new Map([
+         ['message', handleMessage],
+         ['call', handleCall],
+         ['receipt', handleReceipt],
+-        ['notification', handleNotification]
++        ['notification', handleNotification],
++        ['status', handleStatus]
+     ]), {
+         isWsOpen: () => ws.isOpen,
+         onUnexpectedError,
+@@ -1621,6 +1634,10 @@ export const makeMessagesRecvSocket = (config) => {
+     ws.on('CB:notification', async (node) => {
+         await processNode('notification', node, 'handling notification', handleNotification);
+     });
++    ws.on('CB:status', async (node) => {
++        // processNode confirma JIDs ignorados por conta própria, fora do try/catch de handleStatus
++        await processNode('status', node, 'acking status stanza', handleStatus).catch(error => onUnexpectedError(error, 'acking status stanza'));
++    });
+     ws.on('CB:ack,class:message', (node) => {
+         handleBadAck(node).catch(error => onUnexpectedError(error, 'handling bad ack'));
+     });
 diff --git a/node_modules/baileys/lib/Socket/messages-send.js b/node_modules/baileys/lib/Socket/messages-send.js
 index d61e064..3086b42 100644
 --- a/node_modules/baileys/lib/Socket/messages-send.js
